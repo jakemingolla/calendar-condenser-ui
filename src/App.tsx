@@ -24,6 +24,7 @@ interface Calendar {
   owner: string;
   created_at: string;
   updated_at: string;
+  events?: CalendarEvent[];
 }
 
 interface StateWithCalendar {
@@ -67,6 +68,27 @@ export function App() {
   const [isStarted, setIsStarted] = useState(false);
   const [llmContent, setLlmContent] = useState("");
   const [currentState, setCurrentState] = useState<Record<string, any> | null>(null);
+  const [inviteeUsers, setInviteeUsers] = useState<Record<string, User>>({});
+  const [loadingInvitees, setLoadingInvitees] = useState<Record<string, boolean>>({});
+
+  // Function to fetch user information for invitees
+  const fetchInviteeUser = async (userId: string) => {
+    if (inviteeUsers[userId]) return; // Already fetched
+    
+    setLoadingInvitees(prev => ({ ...prev, [userId]: true }));
+    
+    try {
+      const response = await fetch(`http://localhost:8000/api/v1/users/${userId}`);
+      if (response.ok) {
+        const userData = await response.json();
+        setInviteeUsers(prev => ({ ...prev, [userId]: userData }));
+      }
+    } catch (error) {
+      console.error(`Failed to fetch user ${userId}:`, error);
+    } finally {
+      setLoadingInvitees(prev => ({ ...prev, [userId]: false }));
+    }
+  };
 
   const handleStart = async () => {
     setIsStarted(true);
@@ -121,52 +143,127 @@ export function App() {
   // Render state-specific content
   const renderStateContent = (state: any) => {
     // Helper function to render calendar section
-    const renderCalendarSection = (calendar: Calendar) => (
+    const renderCalendarSection = (calendar: any, currentUser: User, invitees?: User[]) => (
       <div className="bg-white p-6 rounded-lg shadow-sm border">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           📅 {calendar.name}
         </h3>
-        <div className="space-y-2 text-sm text-gray-600">
-          <p>Created: {new Date(calendar.created_at).toLocaleDateString()}</p>
-          <p>Last Updated: {new Date(calendar.updated_at).toLocaleDateString()}</p>
-        </div>
         
         {/* Calendar Events Section */}
         <div className="mt-4">
           <h4 className="font-medium text-gray-900 mb-3">📋 Calendar Events</h4>
-          <div className="text-gray-500 italic text-sm">
-            Events will appear here as they become available in the stream
-          </div>
-        </div>
-      </div>
-    );
-
-    // Helper function to render invitees section
-    const renderInviteesSection = (invitees: User[], inviteeCalendars: Record<string, Calendar>) => (
-      <div className="bg-white p-6 rounded-lg shadow-sm border">
-        <h4 className="font-medium text-gray-900 mb-3">👥 Invitees ({invitees.length})</h4>
-        <div className="space-y-3">
-          {invitees.map((invitee) => (
-            <div key={invitee.id} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-              <img 
-                src={invitee.avatar_url} 
-                alt={`${invitee.given_name}'s avatar`}
-                className="w-10 h-10 rounded-full object-cover"
-                onError={(e) => {
-                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
-                }}
-              />
-              <div className="flex-1">
-                <p className="font-medium text-gray-900">{invitee.given_name}</p>
-                <p className="text-sm text-gray-600">{invitee.timezone}</p>
-              </div>
-              {inviteeCalendars[invitee.id] && (
-                <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
-                  {inviteeCalendars[invitee.id].name}
+          {calendar.events && calendar.events.length > 0 ? (
+            <div className="space-y-3">
+              {calendar.events.map((event: any) => (
+                <div key={event.id} className="p-4 bg-gray-50 rounded-lg border">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h5 className="font-medium text-gray-900 mb-1">{event.title}</h5>
+                      {event.description && (
+                        <p className="text-sm text-gray-600 mb-2">{event.description}</p>
+                      )}
+                      
+                      {/* Time Information */}
+                      <div className="text-center mb-2">
+                        <p className="text-sm text-gray-600">
+                          Starts at <span className="font-semibold">{new Date(event.start_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span> and ends at <span className="font-semibold">{new Date(event.end_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span>.
+                        </p>
+                      </div>
+                      
+                      {/* Host Information */}
+                      <div className="flex items-center justify-center space-x-2 mb-2">
+                        <span className="text-sm font-medium text-gray-700">Hosted by:</span>
+                        <div className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                          <img 
+                            src={currentUser.avatar_url} 
+                            alt={`${currentUser.given_name}'s avatar`}
+                            className="w-8 h-8 rounded-full object-cover"
+                            onError={(e) => {
+                              e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
+                            }}
+                          />
+                          <span className="text-sm font-medium text-gray-700">{currentUser.given_name}</span>
+                        </div>
+                      </div>
+                      
+                      <div className="text-xs text-gray-500 space-y-1">
+                        {/* Invitees Section */}
+                        {invitees && invitees.length > 0 ? (
+                          <div className="flex items-center justify-center space-x-2">
+                            <span className="text-sm font-medium text-gray-700">Invitees:</span>
+                            <div className="flex flex-wrap gap-2">
+                              {invitees.map((invitee) => (
+                                <div key={invitee.id} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                                  <img 
+                                    src={invitee.avatar_url} 
+                                    alt={`${invitee.given_name}'s avatar`}
+                                    className="w-4 h-4 rounded-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
+                                    }}
+                                  />
+                                  <span className="text-xs text-gray-700">{invitee.given_name}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : event.invitees && event.invitees.length > 0 ? (
+                          <div className="flex items-center justify-center space-x-2">
+                            <span className="text-sm font-medium text-gray-700">Invitees:</span>
+                            <div className="flex flex-wrap gap-2">
+                              {event.invitees.map((invitee: any) => {
+                                const userId = invitee.id;
+                                const userData = inviteeUsers[userId];
+                                const isLoading = loadingInvitees[userId];
+                                
+                                // Fetch user data if not already loaded
+                                if (!userData && !isLoading) {
+                                  fetchInviteeUser(userId);
+                                }
+                                
+                                if (isLoading) {
+                                  return (
+                                    <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                                      <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
+                                      <div className="w-20 h-4 bg-gray-200 rounded animate-pulse"></div>
+                                    </div>
+                                  );
+                                }
+                                
+                                if (userData) {
+                                  return (
+                                    <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                                      <img 
+                                        src={userData.avatar_url} 
+                                        alt={`${userData.given_name}'s avatar`}
+                                        className="w-8 h-8 rounded-full object-cover"
+                                        onError={(e) => {
+                                          e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
+                                        }}
+                                      />
+                                      <span className="text-sm font-medium text-gray-700">{userData.given_name}</span>
+                                    </div>
+                                  );
+                                }
+                                
+                                return null;
+                              })}
+                            </div>
+                          </div>
+                        ) : (
+                          <p>👥 No invitees</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
-          ))}
+          ) : (
+            <div className="text-gray-500 italic text-sm">
+              No events scheduled for this date
+            </div>
+          )}
         </div>
       </div>
     );
@@ -182,7 +279,7 @@ export function App() {
       const calendarState = state as StateWithCalendar;
       return (
         <div className="space-y-4">
-          {renderCalendarSection(calendarState.calendar)}
+          {renderCalendarSection(calendarState.calendar, calendarState.user)}
         </div>
       );
     }
@@ -191,8 +288,7 @@ export function App() {
       const inviteeState = state as StateWithInvitees;
       return (
         <div className="space-y-4">
-          {renderCalendarSection(inviteeState.calendar)}
-          {renderInviteesSection(inviteeState.invitees, inviteeState.invitee_calendars)}
+          {renderCalendarSection(inviteeState.calendar, inviteeState.user, inviteeState.invitees)}
         </div>
       );
     }
@@ -201,8 +297,7 @@ export function App() {
       const reschedulingState = state as StateWithPendingReschedulingProposals;
       return (
         <div className="space-y-4">
-          {renderCalendarSection(reschedulingState.calendar)}
-          {renderInviteesSection(reschedulingState.invitees, reschedulingState.invitee_calendars)}
+          {renderCalendarSection(reschedulingState.calendar, reschedulingState.user, reschedulingState.invitees)}
           
           {/* Pending Rescheduling Proposals */}
           <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
@@ -227,8 +322,7 @@ export function App() {
       const completedState = state as StateWithCompletedReschedulingProposals;
       return (
         <div className="space-y-4">
-          {renderCalendarSection(completedState.calendar)}
-          {renderInviteesSection(completedState.invitees, completedState.invitee_calendars)}
+          {renderCalendarSection(completedState.calendar, completedState.user, completedState.invitees)}
           
           {/* Completed Rescheduling Proposals */}
           <div className="bg-green-50 p-6 rounded-lg border border-green-200">
@@ -262,25 +356,43 @@ export function App() {
   };
 
   return (
-    <div className="mx-auto p-8 -mt-32 text-center relative z-10">
-      <h1 className="text-5xl font-mono font-bold mb-4 leading-tight text-gray-800">
-        calendar-condenser
-      </h1>
+    <div className="min-h-screen bg-gray-50">
+      {/* Fixed header section */}
+      <div className="sticky top-0 z-20 bg-gray-50 pt-8 pb-6">
+        <div className="mx-auto text-center">
+          <h1 className="text-5xl font-mono font-bold leading-tight text-gray-800">
+            calendar-condenser
+          </h1>
+          
+          {!isStarted ? (
+            <button 
+              onClick={handleStart}
+              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+            >
+              start
+            </button>
+          ) : null}
+        </div>
+      </div>
       
-      {!isStarted ? (
-        <button 
-          onClick={handleStart}
-          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
-        >
-          start
-        </button>
-      ) : (
-        <div className="mt-6 relative">
-          {/* Current State positioned to the left of the centered LLM Response */}
-          <div className="absolute right-full mr-6 w-[400px]">
+      {isStarted && (
+        <div className="relative">
+          {/* Current State positioned on the left edge of the screen */}
+          <div className="fixed left-0 top-32 w-[400px] ml-8">
             {currentState && (
               <div className="p-4 bg-gray-100 rounded-lg text-left">
-                <h2 className="font-semibold mb-2">Current State:</h2>
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="font-semibold">Current State:</h2>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(JSON.stringify(currentState, null, 2));
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded transition-colors duration-200"
+                    title="Copy to clipboard"
+                  >
+                    📋 Copy
+                  </button>
+                </div>
                 <pre className="text-xs overflow-y-auto whitespace-pre-wrap h-[500px]">
                   {JSON.stringify(currentState, null, 2)}
                 </pre>
@@ -290,19 +402,21 @@ export function App() {
           
           {/* Centered LLM Response column with state info below */}
           <div className="mx-auto w-[600px]">
-            {llmContent && (
-              <div className="p-4 bg-white border rounded-lg text-left mb-6">
-                <h2 className="font-semibold mb-2">LLM Response:</h2>
-                <p className="whitespace-pre-wrap">{llmContent}</p>
-              </div>
-            )}
-            
-            {/* Structured State Information below LLM Response */}
-            {currentState && (
-              <div className="w-full">
-                {renderStateContent(currentState)}
-              </div>
-            )}
+            <div className="overflow-y-auto pr-4">
+              {llmContent && (
+                <div className="p-4 bg-white border rounded-lg text-left mb-6">
+                  <h2 className="font-semibold mb-2">LLM Response:</h2>
+                  <p className="whitespace-pre-wrap">{llmContent}</p>
+                </div>
+              )}
+              
+              {/* Structured State Information below LLM Response */}
+              {currentState && (
+                <div className="w-full">
+                  {renderStateContent(currentState)}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
