@@ -144,127 +144,117 @@ export function App() {
   const renderStateContent = (state: any) => {
     // Helper function to render calendar section
     const renderCalendarSection = (calendar: any, currentUser: User, invitees?: User[]) => (
-      <div className="bg-white p-6 rounded-lg shadow-sm border">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          📅 {calendar.name}
-        </h3>
-        
-        {/* Calendar Events Section */}
-        <div className="mt-4">
-          <h4 className="font-medium text-gray-900 mb-3">📋 Calendar Events</h4>
-          {calendar.events && calendar.events.length > 0 ? (
-            <div className="space-y-3">
-              {calendar.events.map((event: any) => (
-                <div key={event.id} className="p-4 bg-gray-50 rounded-lg border">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h5 className="font-medium text-gray-900 mb-1">{event.title}</h5>
-                      {event.description && (
-                        <p className="text-sm text-gray-600 mb-2">{event.description}</p>
-                      )}
-                      
-                      {/* Time Information */}
-                      <div className="text-center mb-2">
-                        <p className="text-sm text-gray-600">
-                          Starts at <span className="font-semibold">{new Date(event.start_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span> and ends at <span className="font-semibold">{new Date(event.end_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span>.
-                        </p>
-                      </div>
-                      
-                      {/* Host Information */}
-                      <div className="flex items-center justify-center space-x-2 mb-2">
-                        <span className="text-sm font-medium text-gray-700">Hosted by:</span>
-                        <div className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                          <img 
-                            src={currentUser.avatar_url} 
-                            alt={`${currentUser.given_name}'s avatar`}
-                            className="w-8 h-8 rounded-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
-                            }}
-                          />
-                          <span className="text-sm font-medium text-gray-700">{currentUser.given_name}</span>
-                        </div>
-                      </div>
-                      
-                      <div className="text-xs text-gray-500 space-y-1">
-                        {/* Invitees Section */}
-                        {invitees && invitees.length > 0 ? (
-                          <div className="flex items-center justify-center space-x-2">
-                            <span className="text-sm font-medium text-gray-700">Invitees:</span>
-                            <div className="flex flex-wrap gap-2">
-                              {invitees.map((invitee) => (
-                                <div key={invitee.id} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                                  <img 
-                                    src={invitee.avatar_url} 
-                                    alt={`${invitee.given_name}'s avatar`}
-                                    className="w-4 h-4 rounded-full object-cover"
-                                    onError={(e) => {
-                                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
-                                    }}
-                                  />
-                                  <span className="text-xs text-gray-700">{invitee.given_name}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : event.invitees && event.invitees.length > 0 ? (
-                          <div className="flex items-center justify-center space-x-2">
-                            <span className="text-sm font-medium text-gray-700">Invitees:</span>
-                            <div className="flex flex-wrap gap-2">
-                              {event.invitees.map((invitee: any) => {
-                                const userId = invitee.id;
-                                const userData = inviteeUsers[userId];
-                                const isLoading = loadingInvitees[userId];
-                                
-                                // Fetch user data if not already loaded
-                                if (!userData && !isLoading) {
-                                  fetchInviteeUser(userId);
-                                }
-                                
-                                if (isLoading) {
-                                  return (
-                                    <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                                      <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
-                                      <div className="w-20 h-4 bg-gray-200 rounded animate-pulse"></div>
-                                    </div>
-                                  );
-                                }
-                                
-                                if (userData) {
-                                  return (
-                                    <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                                      <img 
-                                        src={userData.avatar_url} 
-                                        alt={`${userData.given_name}'s avatar`}
-                                        className="w-8 h-8 rounded-full object-cover"
-                                        onError={(e) => {
-                                          e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
-                                        }}
-                                      />
-                                      <span className="text-sm font-medium text-gray-700">{userData.given_name}</span>
-                                    </div>
-                                  );
-                                }
-                                
-                                return null;
-                              })}
-                            </div>
-                          </div>
-                        ) : (
-                          <p>👥 No invitees</p>
-                        )}
-                      </div>
+      <div className="space-y-3">
+        {calendar.events && calendar.events.length > 0 ? (
+          calendar.events.map((event: any) => (
+            <div key={event.id} className="p-4 bg-gray-50 rounded-lg border">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h5 className="font-medium text-gray-900 mb-1">{event.title}</h5>
+                  {event.description && (
+                    <p className="text-sm text-gray-600 mb-2">{event.description}</p>
+                  )}
+                  
+                  {/* Time Information */}
+                  <div className="text-center mb-2">
+                    <p className="text-sm text-gray-600">
+                      Starts at <span className="font-semibold">{new Date(event.start_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span> and ends at <span className="font-semibold">{new Date(event.end_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span>.
+                    </p>
+                  </div>
+                  
+                  {/* Host Information */}
+                  <div className="flex items-center justify-center space-x-2 mb-2">
+                    <span className="text-sm font-medium text-gray-700">Hosted by:</span>
+                    <div className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                      <img 
+                        src={currentUser.avatar_url} 
+                        alt={`${currentUser.given_name}'s avatar`}
+                        className="w-8 h-8 rounded-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
+                        }}
+                      />
+                      <span className="text-sm font-medium text-gray-700">{currentUser.given_name}</span>
                     </div>
                   </div>
+                  
+                  <div className="text-xs text-gray-500 space-y-1">
+                    {/* Invitees Section */}
+                    {invitees && invitees.length > 0 ? (
+                      <div className="flex items-center justify-center space-x-2">
+                        <span className="text-sm font-medium text-gray-700">Invitees:</span>
+                        <div className="flex flex-wrap gap-2">
+                          {invitees.map((invitee) => (
+                            <div key={invitee.id} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                              <img 
+                                src={invitee.avatar_url} 
+                                alt={`${invitee.given_name}'s avatar`}
+                                className="w-4 h-4 rounded-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
+                                }}
+                              />
+                              <span className="text-xs text-gray-700">{invitee.given_name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : event.invitees && event.invitees.length > 0 ? (
+                      <div className="flex items-center justify-center space-x-2">
+                        <span className="text-sm font-medium text-gray-700">Invitees:</span>
+                        <div className="flex flex-wrap gap-2">
+                          {event.invitees.map((invitee: any) => {
+                            const userId = invitee.id;
+                            const userData = inviteeUsers[userId];
+                            const isLoading = loadingInvitees[userId];
+                            
+                            // Fetch user data if not already loaded
+                            if (!userData && !isLoading) {
+                              fetchInviteeUser(userId);
+                            }
+                            
+                            if (isLoading) {
+                              return (
+                                <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                                  <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
+                                  <div className="w-20 h-4 bg-gray-200 rounded animate-pulse"></div>
+                                </div>
+                              );
+                            }
+                            
+                            if (userData) {
+                              return (
+                                <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
+                                  <img 
+                                    src={userData.avatar_url} 
+                                    alt={`${userData.given_name}'s avatar`}
+                                    className="w-8 h-8 rounded-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
+                                    }}
+                                  />
+                                  <span className="text-sm font-medium text-gray-700">{userData.given_name}</span>
+                                </div>
+                              );
+                            }
+                            
+                            return null;
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <p>👥 No invitees</p>
+                    )}
+                  </div>
                 </div>
-              ))}
+              </div>
             </div>
-          ) : (
-            <div className="text-gray-500 italic text-sm">
-              No events scheduled for this date
-            </div>
-          )}
-        </div>
+          ))
+        ) : (
+          <div className="text-gray-500 italic text-sm">
+            No events scheduled for this date
+          </div>
+        )}
       </div>
     );
 
@@ -277,26 +267,18 @@ export function App() {
 
     if (state.type === 'StateWithCalendar') {
       const calendarState = state as StateWithCalendar;
-      return (
-        <div className="space-y-4">
-          {renderCalendarSection(calendarState.calendar, calendarState.user)}
-        </div>
-      );
+      return renderCalendarSection(calendarState.calendar, calendarState.user);
     }
 
     if (state.type === 'StateWithInvitees') {
       const inviteeState = state as StateWithInvitees;
-      return (
-        <div className="space-y-4">
-          {renderCalendarSection(inviteeState.calendar, inviteeState.user, inviteeState.invitees)}
-        </div>
-      );
+      return renderCalendarSection(inviteeState.calendar, inviteeState.user, inviteeState.invitees);
     }
 
     if (state.type === 'StateWithPendingReschedulingProposals') {
       const reschedulingState = state as StateWithPendingReschedulingProposals;
       return (
-        <div className="space-y-4">
+        <>
           {renderCalendarSection(reschedulingState.calendar, reschedulingState.user, reschedulingState.invitees)}
           
           {/* Pending Rescheduling Proposals */}
@@ -314,14 +296,14 @@ export function App() {
               ))}
             </div>
           </div>
-        </div>
+        </>
       );
     }
 
     if (state.type === 'StateWithCompletedReschedulingProposals') {
       const completedState = state as StateWithCompletedReschedulingProposals;
       return (
-        <div className="space-y-4">
+        <>
           {renderCalendarSection(completedState.calendar, completedState.user, completedState.invitees)}
           
           {/* Completed Rescheduling Proposals */}
@@ -340,7 +322,7 @@ export function App() {
               ))}
             </div>
           </div>
-        </div>
+        </>
       );
     }
 
