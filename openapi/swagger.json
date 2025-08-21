@@ -1,0 +1,502 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "FastAPI", "version": "0.1.0" },
+  "paths": {
+    "/api/v1/users/{user_id}": {
+      "get": {
+        "summary": "Get User",
+        "operationId": "get_user_api_v1_users__user_id__get",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "format": "uuid", "title": "User Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/graphs/{graph_id}/stream": {
+      "post": {
+        "tags": ["graphs"],
+        "summary": "Stream graph execution results",
+        "description": "Streams the execution results from a graph, including:\n\n    - **State updates**: Various state objects (InitialState, StateWithCalendar, etc.)\n      that show the progression through the graph execution\n    - **AI messages**: AIMessageChunk objects containing AI-generated responses\n\n    The response is a stream where each line contains a JSON object.",
+        "operationId": "stream_api_v1_graphs__graph_id__stream_post",
+        "parameters": [
+          {
+            "name": "graph_id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "title": "Graph Id" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Stream of graph execution states and AI messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/StreamlinedAIMessageChunk"
+                    },
+                    { "$ref": "#/components/schemas/InitialState" },
+                    { "$ref": "#/components/schemas/StateWithCalendar" },
+                    { "$ref": "#/components/schemas/StateWithInvitees" },
+                    {
+                      "$ref": "#/components/schemas/StateWithPendingReschedulingProposals"
+                    },
+                    {
+                      "$ref": "#/components/schemas/StateWithCompletedReschedulingProposals"
+                    }
+                  ],
+                  "title": "Response Stream Api V1 Graphs  Graph Id  Stream Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HTTPValidationError" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "summary": "Root",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": { "type": "string" },
+                  "type": "object",
+                  "title": "Response Root  Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AcceptedRescheduledEvent": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "original_event": {
+            "$ref": "#/components/schemas/CalendarEvent",
+            "description": "The event pending rescheduling."
+          },
+          "new_start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New Start Time",
+            "description": "The new start time for the event."
+          },
+          "new_end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New End Time",
+            "description": "The new end time for the event."
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "A detailed explanation of the rescheduling proposal."
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_event",
+          "new_start_time",
+          "new_end_time",
+          "explanation"
+        ],
+        "title": "AcceptedRescheduledEvent"
+      },
+      "AdditionalKwargs": {
+        "properties": { "source": { "type": "string", "title": "Source" } },
+        "type": "object",
+        "required": ["source"],
+        "title": "AdditionalKwargs"
+      },
+      "Calendar": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "name": { "type": "string", "title": "Name" },
+          "owner": { "type": "string", "format": "uuid", "title": "Owner" },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "deleted_at": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Deleted At"
+          }
+        },
+        "type": "object",
+        "required": ["id", "name", "owner", "created_at", "updated_at"],
+        "title": "Calendar"
+      },
+      "CalendarEvent": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "title": { "type": "string", "title": "Title" },
+          "description": {
+            "anyOf": [{ "type": "string" }, { "type": "null" }],
+            "title": "Description"
+          },
+          "owner": { "type": "string", "format": "uuid", "title": "Owner" },
+          "invitees": {
+            "items": { "$ref": "#/components/schemas/CalendarEventInvitee" },
+            "type": "array",
+            "title": "Invitees"
+          },
+          "start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Start Time"
+          },
+          "end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "End Time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "deleted_at": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Deleted At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "owner",
+          "start_time",
+          "end_time",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "CalendarEvent"
+      },
+      "CalendarEventInvitee": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "confirmed": {
+            "anyOf": [{ "type": "boolean" }, { "type": "null" }],
+            "title": "Confirmed"
+          },
+          "confirmed_at": {
+            "anyOf": [
+              { "type": "string", "format": "date-time" },
+              { "type": "null" }
+            ],
+            "title": "Confirmed At"
+          }
+        },
+        "type": "object",
+        "required": ["id"],
+        "title": "CalendarEventInvitee"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": { "$ref": "#/components/schemas/ValidationError" },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "InitialState": {
+        "properties": {
+          "date": { "type": "string", "format": "date-time", "title": "Date" },
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "user": { "$ref": "#/components/schemas/User" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["date", "user"],
+        "title": "InitialState"
+      },
+      "PendingRescheduledEvent": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "original_event": {
+            "$ref": "#/components/schemas/CalendarEvent",
+            "description": "The event pending rescheduling."
+          },
+          "new_start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New Start Time",
+            "description": "The new start time for the event."
+          },
+          "new_end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New End Time",
+            "description": "The new end time for the event."
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "A detailed explanation of the rescheduling proposal."
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_event",
+          "new_start_time",
+          "new_end_time",
+          "explanation"
+        ],
+        "title": "PendingRescheduledEvent"
+      },
+      "RejectedRescheduledEvent": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "original_event": {
+            "$ref": "#/components/schemas/CalendarEvent",
+            "description": "The event pending rescheduling."
+          },
+          "new_start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New Start Time",
+            "description": "The new start time for the event."
+          },
+          "new_end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New End Time",
+            "description": "The new end time for the event."
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "A detailed explanation of the rescheduling proposal."
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_event",
+          "new_start_time",
+          "new_end_time",
+          "explanation"
+        ],
+        "title": "RejectedRescheduledEvent"
+      },
+      "StateWithCalendar": {
+        "properties": {
+          "date": { "type": "string", "format": "date-time", "title": "Date" },
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "user": { "$ref": "#/components/schemas/User" },
+          "calendar": { "$ref": "#/components/schemas/Calendar" }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["date", "user", "calendar"],
+        "title": "StateWithCalendar"
+      },
+      "StateWithCompletedReschedulingProposals": {
+        "properties": {
+          "date": { "type": "string", "format": "date-time", "title": "Date" },
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "user": { "$ref": "#/components/schemas/User" },
+          "calendar": { "$ref": "#/components/schemas/Calendar" },
+          "invitees": {
+            "items": { "$ref": "#/components/schemas/User" },
+            "type": "array",
+            "title": "Invitees"
+          },
+          "invitee_calendars": {
+            "additionalProperties": { "$ref": "#/components/schemas/Calendar" },
+            "propertyNames": { "format": "uuid" },
+            "type": "object",
+            "title": "Invitee Calendars"
+          },
+          "pending_rescheduling_proposals": {
+            "items": { "$ref": "#/components/schemas/PendingRescheduledEvent" },
+            "type": "array",
+            "title": "Pending Rescheduling Proposals"
+          },
+          "completed_rescheduling_proposals": {
+            "items": {
+              "anyOf": [
+                { "$ref": "#/components/schemas/AcceptedRescheduledEvent" },
+                { "$ref": "#/components/schemas/RejectedRescheduledEvent" }
+              ]
+            },
+            "type": "array",
+            "title": "Completed Rescheduling Proposals"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "user",
+          "calendar",
+          "invitees",
+          "pending_rescheduling_proposals",
+          "completed_rescheduling_proposals"
+        ],
+        "title": "StateWithCompletedReschedulingProposals"
+      },
+      "StateWithInvitees": {
+        "properties": {
+          "date": { "type": "string", "format": "date-time", "title": "Date" },
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "user": { "$ref": "#/components/schemas/User" },
+          "calendar": { "$ref": "#/components/schemas/Calendar" },
+          "invitees": {
+            "items": { "$ref": "#/components/schemas/User" },
+            "type": "array",
+            "title": "Invitees"
+          },
+          "invitee_calendars": {
+            "additionalProperties": { "$ref": "#/components/schemas/Calendar" },
+            "propertyNames": { "format": "uuid" },
+            "type": "object",
+            "title": "Invitee Calendars"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": ["date", "user", "calendar", "invitees"],
+        "title": "StateWithInvitees"
+      },
+      "StateWithPendingReschedulingProposals": {
+        "properties": {
+          "date": { "type": "string", "format": "date-time", "title": "Date" },
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "user": { "$ref": "#/components/schemas/User" },
+          "calendar": { "$ref": "#/components/schemas/Calendar" },
+          "invitees": {
+            "items": { "$ref": "#/components/schemas/User" },
+            "type": "array",
+            "title": "Invitees"
+          },
+          "invitee_calendars": {
+            "additionalProperties": { "$ref": "#/components/schemas/Calendar" },
+            "propertyNames": { "format": "uuid" },
+            "type": "object",
+            "title": "Invitee Calendars"
+          },
+          "pending_rescheduling_proposals": {
+            "items": { "$ref": "#/components/schemas/PendingRescheduledEvent" },
+            "type": "array",
+            "title": "Pending Rescheduling Proposals"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "date",
+          "user",
+          "calendar",
+          "invitees",
+          "pending_rescheduling_proposals"
+        ],
+        "title": "StateWithPendingReschedulingProposals"
+      },
+      "StreamlinedAIMessageChunk": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "AIMessageChunk",
+            "title": "Type",
+            "default": "AIMessageChunk"
+          },
+          "content": { "type": "string", "title": "Content" },
+          "additional_kwargs": {
+            "$ref": "#/components/schemas/AdditionalKwargs"
+          }
+        },
+        "type": "object",
+        "required": ["content", "additional_kwargs"],
+        "title": "StreamlinedAIMessageChunk"
+      },
+      "User": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "given_name": { "type": "string", "title": "Given Name" },
+          "timezone": { "type": "string", "title": "Timezone" },
+          "avatar_url": { "type": "string", "title": "Avatar Url" }
+        },
+        "type": "object",
+        "required": ["id", "given_name", "timezone", "avatar_url"],
+        "title": "User"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": { "anyOf": [{ "type": "string" }, { "type": "integer" }] },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": { "type": "string", "title": "Message" },
+          "type": { "type": "string", "title": "Error Type" }
+        },
+        "type": "object",
+        "required": ["loc", "msg", "type"],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
