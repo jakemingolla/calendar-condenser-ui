@@ -98,11 +98,31 @@ export function App() {
   const [seenStateTypes, setSeenStateTypes] = useState<Set<string>>(new Set());
   const seenStateIdsRef = useRef<Set<string>>(new Set());
   const [threadId] = useState<string>(() => generateUUID());
+  const timelineContainerRef = useRef<HTMLDivElement>(null);
 
   // Generate thread_id once at startup
   useEffect(() => {
     console.log(`Generated thread_id: ${threadId}`);
   }, [threadId]);
+
+  // Auto-scroll to bottom when timeline updates
+  useEffect(() => {
+    if (timelineContainerRef.current && timeline.length > 0) {
+      console.log('Auto-scrolling to bottom, timeline length:', timeline.length);
+      console.log('Container scrollHeight:', timelineContainerRef.current.scrollHeight);
+      console.log('Container clientHeight:', timelineContainerRef.current.clientHeight);
+      
+      // Use setTimeout to ensure DOM has updated
+      setTimeout(() => {
+        if (timelineContainerRef.current) {
+          timelineContainerRef.current.scrollTo({
+            top: timelineContainerRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        }
+      }, 100);
+    }
+  }, [timeline]);
 
   // Function to fetch user information for invitees
   const fetchInviteeUser = async (userId: string) => {
@@ -318,9 +338,8 @@ export function App() {
       return (
         <div
           key={item.id}
-          className="p-4 bg-white border rounded-lg text-left mb-6"
+          className="p-3 bg-white rounded-lg text-left mb-3 text-sm"
         >
-          <h2 className="font-semibold mb-2">LLM Response:</h2>
           <ReactMarkdown>{processedContent}</ReactMarkdown>
         </div>
       );
@@ -328,7 +347,7 @@ export function App() {
 
     if (item.type === "state_change") {
       return (
-        <div key={item.id} className="w-full mb-6">
+        <div key={item.id} className="w-full mb-3">
           {renderStateContent(item.content)}
         </div>
       );
@@ -425,20 +444,20 @@ export function App() {
       return (
         <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
           {/* Header with user avatars */}
-          <div className="bg-gray-50 p-4">
-            <div className="flex items-center ml-16">
+          <div className="bg-gray-50 p-2">
+            <div className="flex items-center ml-12">
               {/* Current user */}
-              <div className="flex-1 flex flex-col items-center space-y-2">
+              <div className="flex-1 flex flex-col items-center space-y-1">
                 <img
                   src={currentUser.avatar_url}
                   alt={`${currentUser.given_name}'s avatar`}
-                  className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
+                  className="w-8 h-8 rounded-full object-cover border-2 border-blue-500"
                   onError={(e) => {
                     e.currentTarget.src =
                       "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K";
                   }}
                 />
-                <span className="text-sm font-medium text-gray-700">
+                <span className="text-xs font-medium text-gray-700">
                   {currentUser.given_name}
                 </span>
               </div>
@@ -447,35 +466,33 @@ export function App() {
               {invitees?.map((invitee) => (
                 <div
                   key={invitee.id}
-                  className="flex-1 flex flex-col items-center space-y-2"
+                  className="flex-1 flex flex-col items-center space-y-1"
                 >
                   <img
                     src={invitee.avatar_url}
                     alt={`${invitee.given_name}'s avatar`}
-                    className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
+                    className="w-8 h-8 rounded-full object-cover border-2 border-gray-300"
                     onError={(e) => {
                       e.currentTarget.src =
-                        "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K";
+                        "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIzlDQTNBRiIvPgo8L3N2Zz4K";
                     }}
                   />
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-xs font-medium text-gray-700">
                     {invitee.given_name}
                   </span>
                 </div>
               ))}
             </div>
 
-
-
             {/* Calendar grid */}
-            <div className="relative mt-4" style={{ height: `${hourRange * 60}px` }}>
+            <div className="relative mt-2" style={{ height: `${hourRange * 40}px` }}>
               {/* Time labels */}
-              <div className="absolute left-0 top-0 w-16 h-full border-r bg-gray-50">
+              <div className="absolute left-0 top-0 w-12 h-full border-r bg-gray-50">
                 {timeSlots.map((hour) => (
                   <div
                     key={hour}
-                    className="absolute left-2 text-xs text-gray-500 font-mono"
-                    style={{ top: `${(hour - startHour) * 60}px` }}
+                    className="absolute left-1 text-xs text-gray-500 font-mono"
+                    style={{ top: `${(hour - startHour) * 40}px` }}
                   >
                     {hour === 12
                       ? "12 PM"
@@ -490,13 +507,13 @@ export function App() {
               {timeSlots.map((hour) => (
                 <div
                   key={hour}
-                  className="absolute left-16 right-0 border-t border-gray-200"
-                  style={{ top: `${(hour - startHour) * 60}px` }}
+                  className="absolute left-12 right-0 border-t border-gray-200"
+                  style={{ top: `${(hour - startHour) * 40}px` }}
                 />
               ))}
 
               {/* User columns */}
-              <div className="ml-16 h-full flex">
+              <div className="ml-12 h-full flex">
                 {/* Current user column */}
                 <div className="flex-1 relative border-r border-gray-200">
                   {calendar.events.map((event: any) => {
@@ -535,17 +552,15 @@ export function App() {
                         <div key={event.id} className="relative">
                           {/* Proposed new time slot (green) */}
                           <div
-                            className="absolute left-1 right-1 bg-green-100 border-2 border-green-400 rounded p-2 text-xs overflow-hidden z-10 shadow-md"
+                            className="absolute left-1 right-1 bg-green-100 border-2 border-green-400 rounded p-1 text-xs overflow-hidden z-10 shadow-md"
                             style={{
-                              top: `${newStartPosition * 60}px`,
-                              height: `${newDuration * 60}px`,
-                              minHeight: "20px",
+                              top: `${newStartPosition * 40}px`,
+                              height: `${newDuration * 40}px`,
+                              minHeight: "16px",
                             }}
                           >
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="font-medium text-green-900 truncate flex-1">
-                                {event.title}
-                              </div>
+                            <div className="font-medium text-green-900 truncate text-xs">
+                              {event.title}
                             </div>
                             <div className="text-green-700 text-xs">
                               {newStartTime.toLocaleTimeString([], {
@@ -564,17 +579,15 @@ export function App() {
 
                           {/* Original time slot (faded red) */}
                           <div
-                            className="absolute left-1 right-1 bg-red-100 border border-red-300 rounded p-2 text-xs overflow-hidden opacity-60"
+                            className="absolute left-1 right-1 bg-red-100 border border-red-300 rounded p-1 text-xs overflow-hidden opacity-60"
                             style={{
-                              top: `${top * 60}px`,
-                              height: `${height * 60}px`,
-                              minHeight: "20px",
+                              top: `${top * 40}px`,
+                              height: `${height * 40}px`,
+                              minHeight: "16px",
                             }}
                           >
-                            <div className="flex items-center justify-between mb-1">
-                              <div className="font-medium text-red-900 truncate flex-1">
-                                {event.title}
-                              </div>
+                            <div className="font-medium text-red-900 truncate text-xs">
+                              {event.title}
                             </div>
                             <div className="text-red-700 text-xs">
                               {new Date(event.start_time).toLocaleTimeString(
@@ -599,9 +612,9 @@ export function App() {
                             className="absolute z-20"
                             style={{
                               left: "50%",
-                              top: `${(top + height) * 60}px`,
+                              top: `${(top + height) * 40}px`,
                               width: "24px",
-                              height: `${(newStartPosition - (top + height)) * 60}px`,
+                              height: `${(newStartPosition - (top + height)) * 40}px`,
                               transform: "translateX(-50%)",
                             }}
                             viewBox="0 0 24 24"
@@ -626,14 +639,14 @@ export function App() {
                     return (
                       <div
                         key={event.id}
-                        className="absolute left-1 right-1 bg-gray-100 border border-gray-300 rounded p-2 text-xs overflow-hidden"
+                        className="absolute left-1 right-1 bg-gray-100 border border-gray-300 rounded p-1 text-xs overflow-hidden"
                         style={{
-                          top: `${top * 60}px`,
-                          height: `${height * 60}px`,
-                          minHeight: "20px",
+                          top: `${top * 40}px`,
+                          height: `${height * 40}px`,
+                          minHeight: "16px",
                         }}
                       >
-                        <div className="font-medium text-gray-900 truncate">
+                        <div className="font-medium text-gray-900 truncate text-xs">
                           {event.title}
                         </div>
                         <div className="text-gray-700 text-xs">
@@ -667,14 +680,14 @@ export function App() {
                         return (
                           <div
                             key={event.id}
-                            className="absolute left-1 right-1 bg-gray-100 border border-gray-300 rounded p-2 text-xs overflow-hidden"
+                            className="absolute left-1 right-1 bg-gray-100 border border-gray-300 rounded p-1 text-xs overflow-hidden"
                             style={{
-                              top: `${top * 60}px`,
-                              height: `${height * 60}px`,
-                              minHeight: "20px",
+                              top: `${top * 40}px`,
+                              height: `${height * 40}px`,
+                              minHeight: "16px",
                             }}
                           >
-                            <div className="font-medium text-gray-900 truncate">
+                            <div className="font-medium text-gray-900 truncate text-xs">
                               {event.title}
                             </div>
                             <div className="text-gray-700 text-xs">
@@ -705,19 +718,19 @@ export function App() {
             {/* Legend - moved below calendar display */}
             {pendingReschedulingProposals &&
               pendingReschedulingProposals.length > 0 && (
-                <div className="bg-gray-50 border-t p-3">
-                  <div className="flex items-center justify-center space-x-6 text-xs">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-gray-100 border border-gray-300 rounded"></div>
-                      <span className="text-gray-600">Unchanged Events</span>
+                <div className="bg-gray-50 border-t p-2">
+                  <div className="flex items-center justify-center space-x-4 text-xs">
+                    <div className="flex items-center space-x-1">
+                      <div className="w-2 h-2 bg-gray-100 border border-gray-300 rounded"></div>
+                      <span className="text-gray-600 text-xs">Unchanged Events</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-green-100 border-2 border-green-400 rounded"></div>
-                      <span className="text-gray-600">New Event Times</span>
+                    <div className="flex items-center space-x-1">
+                      <div className="w-2 h-2 bg-green-100 border-2 border-green-400 rounded"></div>
+                      <span className="text-gray-600 text-xs">New Event Times</span>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-red-100 border border-red-300 rounded opacity-60"></div>
-                      <span className="text-gray-600">Old Event Time</span>
+                    <div className="flex items-center space-x-1">
+                      <div className="w-2 h-2 bg-red-100 border border-red-300 rounded opacity-60"></div>
+                      <span className="text-gray-600 text-xs">Old Event Time</span>
                     </div>
                   </div>
                 </div>
@@ -768,37 +781,37 @@ export function App() {
           )}
 
           {/* Pending Rescheduling Proposals */}
-          <div className="mt-8 space-y-3 text-sm text-gray-700">
+          <div className="mt-4 space-y-2 text-xs text-gray-700">
             {reschedulingState.pending_rescheduling_proposals.map(
               (proposal, index) => (
-                <div key={index} className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
-                  <p>
+                <div key={index} className="p-3 bg-white rounded-lg border shadow-sm">
+                  <p className="text-xs">
                     <strong>Event:</strong>{" "}
-                    {proposal.original_event?.title || "Unknown Event"}
+                    <strong>{proposal.original_event?.title || "Unknown Event"}</strong>
                   </p>
-                  <p>
+                  <p className="text-xs">
                     <strong>Time Change:</strong>{" "}
                     <span className="text-red-600 font-medium">
-                      {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                      {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
                     </span>
                     {" → "}
                     <span className="text-green-600 font-medium">
-                      {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                      {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
                     </span>
                   </p>
-                  <p>
+                  <p className="text-xs">
                     <strong>Reason:</strong> {proposal.explanation}
                   </p>
-                  <div className="flex gap-3 mt-4 justify-center">
+                  <div className="flex gap-2 mt-2 justify-center">
                     <button
                       onClick={() => handleAcceptRescheduling(proposal, index)}
-                      className="px-4 py-2 bg-gray-100 text-green-700 text-sm rounded-md hover:bg-green-50 transition-all duration-200 font-medium"
+                      className="px-3 py-1 bg-gray-100 text-green-700 text-xs rounded-md hover:bg-green-50 transition-all duration-200 font-medium"
                     >
                       Accept
                     </button>
                     <button
                       onClick={() => handleRejectRescheduling(proposal, index)}
-                      className="px-4 py-2 bg-gray-100 text-red-700 text-sm rounded-md hover:bg-red-50 transition-all duration-200 font-medium"
+                      className="px-3 py-1 bg-gray-100 text-red-700 text-xs rounded-md hover:bg-red-50 transition-all duration-200 font-medium"
                     >
                       Reject
                     </button>
@@ -825,20 +838,20 @@ export function App() {
           )}
 
           {/* Completed Rescheduling Proposals */}
-          <div className="bg-green-50 p-6 rounded-lg border border-green-200">
-            <h4 className="font-medium text-green-900 mb-3">
+          <div className="bg-green-50 p-3 rounded-lg border border-green-200">
+            <h4 className="font-medium text-green-900 mb-2 text-sm">
               ✅ Completed Rescheduling Proposals (
               {completedState.completed_rescheduling_proposals.length})
             </h4>
-            <div className="space-y-2 text-sm text-green-800">
+            <div className="space-y-1 text-xs text-green-800">
               {completedState.completed_rescheduling_proposals.map(
                 (proposal, index) => (
-                  <div key={index} className="p-3 bg-green-100 rounded">
-                    <p>
+                  <div key={index} className="p-2 bg-green-100 rounded">
+                    <p className="text-xs">
                       <strong>Event:</strong>{" "}
                       {proposal.original_event?.title || "Unknown Event"}
                     </p>
-                    <p>
+                    <p className="text-xs">
                       <strong>Time Change:</strong>{" "}
                       <span className="text-red-600 font-medium">
                         {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
@@ -848,13 +861,13 @@ export function App() {
                         {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
                       </span>
                     </p>
-                    <p>
+                    <p className="text-xs">
                       <strong>Status:</strong>{" "}
                       {proposal.type === "AcceptedRescheduledEvent"
                         ? "✅ Accepted"
                         : "❌ Rejected"}
                     </p>
-                    <p>
+                    <p className="text-xs">
                       <strong>Reason:</strong> {proposal.explanation}
                     </p>
                   </div>
@@ -869,9 +882,9 @@ export function App() {
     // Default state display
     console.log("No matching state type, showing default display");
     return (
-      <div className="p-4 bg-gray-100 rounded-lg text-left">
-        <h2 className="font-semibold mb-2">Current State:</h2>
-        <pre className="text-xs overflow-y-auto whitespace-pre-wrap h-[500px]">
+      <div className="p-3 bg-gray-100 rounded-lg text-left">
+        <h2 className="font-semibold mb-1 text-sm">Current State:</h2>
+        <pre className="text-xs overflow-y-auto whitespace-pre-wrap h-[300px]">
           {JSON.stringify(state, null, 2)}
         </pre>
       </div>
@@ -881,16 +894,16 @@ export function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Fixed header section */}
-      <div className="sticky top-0 z-20 bg-gray-50 pt-8 pb-6">
+      <div className="sticky top-0 z-20 bg-gray-50 pt-4 pb-3">
         <div className="mx-auto text-center">
-          <h1 className="text-5xl font-mono font-bold leading-tight text-gray-800">
+          <h1 className="text-3xl font-mono font-bold leading-tight text-gray-800">
             calendar-condenser
           </h1>
 
           {!isStarted ? (
             <button
               onClick={handleStart}
-              className="mt-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+              className="mt-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200 text-sm"
             >
               start
             </button>
@@ -900,22 +913,24 @@ export function App() {
 
       {isStarted && (
         <div className="relative">
-
-
           {/* Centered Timeline column */}
           <div className="mx-auto w-[600px]">
-            <div className="overflow-y-auto pr-4">
+            <div 
+              className="overflow-y-auto pr-4 h-[calc(100vh-200px)]" 
+              ref={timelineContainerRef}
+              style={{ maxHeight: 'calc(100vh - 200px)' }}
+            >
               {/* Debug information */}
-              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs">
-                <h3 className="font-semibold mb-2">Debug Info:</h3>
-                <p>
+              <div className="mb-2 p-2 bg-blue-50 border border-blue-200 rounded text-xs">
+                <h3 className="font-semibold mb-1 text-xs">Debug Info:</h3>
+                <p className="text-xs">
                   <strong>Timeline Items:</strong> {timeline.length}
                 </p>
-                <p>
+                <p className="text-xs">
                   <strong>Seen State IDs:</strong>{" "}
                   {Array.from(seenStateIdsRef.current).length}
                 </p>
-                <p>
+                <p className="text-xs">
                   <strong>Current State Type:</strong>{" "}
                   {currentState?.type || "None"}
                 </p>
