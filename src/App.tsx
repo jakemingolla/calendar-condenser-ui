@@ -1,5 +1,6 @@
 import "./index.css";
 import { useState, useRef } from "react";
+import ReactMarkdown from "react-markdown";
 
 // Type definitions based on the OpenAPI schema
 interface User {
@@ -245,7 +246,7 @@ export function App() {
       return (
         <div key={item.id} className="p-4 bg-white border rounded-lg text-left mb-6">
           <h2 className="font-semibold mb-2">LLM Response:</h2>
-          <p className="whitespace-pre-wrap">{item.content}</p>
+          <ReactMarkdown>{item.content}</ReactMarkdown>
         </div>
       );
     }
