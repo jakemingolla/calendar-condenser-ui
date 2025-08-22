@@ -1,5 +1,5 @@
 import "./index.css";
-import { useState } from "react";
+import { useState, useRef } from "react";
 
 // Type definitions based on the OpenAPI schema
 interface User {
@@ -64,12 +64,24 @@ interface StateWithCompletedReschedulingProposals {
   completed_rescheduling_proposals: any[];
 }
 
+// Timeline item interface
+interface TimelineItem {
+  id: string;
+  timestamp: number;
+  type: 'ai_message' | 'state_change';
+  content: any;
+  stateType?: string; // For state changes, track the type
+  messageId?: string; // For AI messages, track the message ID to group chunks
+}
+
 export function App() {
   const [isStarted, setIsStarted] = useState(false);
-  const [llmContent, setLlmContent] = useState("");
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [currentState, setCurrentState] = useState<Record<string, any> | null>(null);
   const [inviteeUsers, setInviteeUsers] = useState<Record<string, User>>({});
   const [loadingInvitees, setLoadingInvitees] = useState<Record<string, boolean>>({});
+  const [seenStateTypes, setSeenStateTypes] = useState<Set<string>>(new Set());
+  const seenStateIdsRef = useRef<Set<string>>(new Set());
 
   // Function to fetch user information for invitees
   const fetchInviteeUser = async (userId: string) => {
@@ -92,6 +104,9 @@ export function App() {
 
   const handleStart = async () => {
     setIsStarted(true);
+    setTimeline([]);
+    setSeenStateTypes(new Set());
+    seenStateIdsRef.current = new Set();
     
     try {
       const response = await fetch('http://localhost:8000/api/v1/graphs/default/stream', {
@@ -122,11 +137,58 @@ export function App() {
             const data = JSON.parse(line);
             
             if (data.type === 'AIMessageChunk') {
-              if (data.content) {
-                setLlmContent(prev => prev + data.content);
-              }
+              // Add or update AI message in timeline using the id field
+              setTimeline(prev => {
+                const messageId = data.id;
+                const existingIndex = prev.findIndex(item => 
+                  item.type === 'ai_message' && item.messageId === messageId
+                );
+                
+                if (existingIndex >= 0) {
+                  // Update existing AI message by appending content
+                  const updated = [...prev];
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    content: updated[existingIndex].content + (data.content || ''),
+                    timestamp: Date.now()
+                  };
+                  return updated;
+                } else {
+                  // Create new AI message
+                  return [...prev, {
+                    id: `ai_${messageId}_${Date.now()}`,
+                    timestamp: Date.now(),
+                    type: 'ai_message' as const,
+                    content: data.content || '',
+                    messageId: messageId
+                  }];
+                }
+              });
             } else if (data.type && data.type !== 'AIMessageChunk') {
-              // All other types with a type field are state updates - replace the entire state with the new data
+              // Generate a unique ID for this state based on its content
+              const stateId = generateStateId(data);
+              
+              console.log(`Processing state: ${data.type}, Generated ID: ${stateId}`);
+              console.log(`Already seen: ${seenStateIdsRef.current.has(stateId)}`);
+              
+              // Check if this exact state has been seen before
+              if (!seenStateIdsRef.current.has(stateId)) {
+                // First time seeing this state - add to timeline and mark as seen
+                console.log(`Adding new state to timeline: ${data.type}`);
+                seenStateIdsRef.current.add(stateId);
+                
+                setTimeline(prev => [...prev, {
+                  id: `state_${data.type}_${Date.now()}`,
+                  timestamp: Date.now(),
+                  type: 'state_change' as const,
+                  content: data,
+                  stateType: data.type
+                }]);
+              } else {
+                console.log(`Skipping duplicate state: ${data.type}`);
+              }
+              
+              // Always update current state for rendering
               setCurrentState(data);
             }
           } catch (e) {
@@ -138,6 +200,65 @@ export function App() {
       console.error('Error:', error);
       setIsStarted(false);
     }
+  };
+
+  // Generate a unique ID for a state based on its content
+  const generateStateId = (state: any): string => {
+    if (state.type === 'InitialState') {
+      return `initial_${state.user?.id}_${state.date}`;
+    }
+    
+    if (state.type === 'StateWithCalendar') {
+      const events = state.calendar?.events || [];
+      const eventIds = events.map((e: any) => e.id).sort().join(',');
+      return `calendar_${state.user?.id}_${state.date}_${eventIds}`;
+    }
+    
+    if (state.type === 'StateWithInvitees') {
+      const events = state.calendar?.events || [];
+      const eventIds = events.map((e: any) => e.id).sort().join(',');
+      const inviteeIds = (state.invitees || []).map((i: any) => i.id).sort().join(',');
+      return `invitees_${state.user?.id}_${state.date}_${eventIds}_${inviteeIds}`;
+    }
+    
+    if (state.type === 'StateWithPendingReschedulingProposals') {
+      const events = state.calendar?.events || [];
+      const eventIds = events.map((e: any) => e.id).sort().join(',');
+      const proposalCount = (state.pending_rescheduling_proposals || []).length;
+      return `pending_${state.user?.id}_${state.date}_${eventIds}_${proposalCount}`;
+    }
+    
+    if (state.type === 'StateWithCompletedReschedulingProposals') {
+      const events = state.calendar?.events || [];
+      const eventIds = events.map((e: any) => e.id).sort().join(',');
+      const proposalCount = (state.completed_rescheduling_proposals || []).length;
+      return `completed_${state.user?.id}_${state.date}_${eventIds}_${proposalCount}`;
+    }
+    
+    // Fallback for unknown state types
+    return `${state.type}_${JSON.stringify(state).slice(0, 100)}`;
+  };
+
+  // Render timeline items
+  const renderTimelineItem = (item: TimelineItem) => {
+    if (item.type === 'ai_message') {
+      return (
+        <div key={item.id} className="p-4 bg-white border rounded-lg text-left mb-6">
+          <h2 className="font-semibold mb-2">LLM Response:</h2>
+          <p className="whitespace-pre-wrap">{item.content}</p>
+        </div>
+      );
+    }
+    
+    if (item.type === 'state_change') {
+      return (
+        <div key={item.id} className="w-full mb-6">
+          {renderStateContent(item.content)}
+        </div>
+      );
+    }
+    
+    return null;
   };
 
   // Render state-specific content
@@ -191,7 +312,7 @@ export function App() {
                                 alt={`${invitee.given_name}'s avatar`}
                                 className="w-4 h-4 rounded-full object-cover"
                                 onError={(e) => {
-                                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
+                                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
                                 }}
                               />
                               <span className="text-xs text-gray-700">{invitee.given_name}</span>
@@ -382,22 +503,19 @@ export function App() {
             )}
           </div>
           
-          {/* Centered LLM Response column with state info below */}
+          {/* Centered Timeline column */}
           <div className="mx-auto w-[600px]">
             <div className="overflow-y-auto pr-4">
-              {llmContent && (
-                <div className="p-4 bg-white border rounded-lg text-left mb-6">
-                  <h2 className="font-semibold mb-2">LLM Response:</h2>
-                  <p className="whitespace-pre-wrap">{llmContent}</p>
-                </div>
-              )}
+              {/* Debug information */}
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs">
+                <h3 className="font-semibold mb-2">Debug Info:</h3>
+                <p><strong>Timeline Items:</strong> {timeline.length}</p>
+                <p><strong>Seen State IDs:</strong> {Array.from(seenStateIdsRef.current).length}</p>
+                <p><strong>Current State Type:</strong> {currentState?.type || 'None'}</p>
+              </div>
               
-              {/* Structured State Information below LLM Response */}
-              {currentState && (
-                <div className="w-full">
-                  {renderStateContent(currentState)}
-                </div>
-              )}
+              {/* Render timeline items in chronological order */}
+              {timeline.map(renderTimelineItem)}
             </div>
           </div>
         </div>

@@ -462,13 +462,22 @@
             "title": "Type",
             "default": "AIMessageChunk"
           },
-          "content": { "type": "string", "title": "Content" },
+          "content": {
+            "type": "string",
+            "title": "Content",
+            "description": "The content of the message chunk"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "Chunks with the same id are part of the same message"
+          },
           "additional_kwargs": {
             "$ref": "#/components/schemas/AdditionalKwargs"
           }
         },
         "type": "object",
-        "required": ["content", "additional_kwargs"],
+        "required": ["content", "id", "additional_kwargs"],
         "title": "StreamlinedAIMessageChunk"
       },
       "User": {
