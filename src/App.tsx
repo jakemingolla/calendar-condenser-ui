@@ -244,10 +244,13 @@ export function App() {
   // Render timeline items
   const renderTimelineItem = (item: TimelineItem) => {
     if (item.type === 'ai_message') {
+      // Handle escaped newlines from backend (convert \n to actual newlines)
+      const processedContent = item.content.replace(/\\n/g, '\n');
+
       return (
         <div key={item.id} className="p-4 bg-white border rounded-lg text-left mb-6">
           <h2 className="font-semibold mb-2">LLM Response:</h2>
-          <ReactMarkdown>{item.content}</ReactMarkdown>
+          <ReactMarkdown>{processedContent}</ReactMarkdown>
         </div>
       );
     }
