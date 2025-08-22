@@ -486,10 +486,24 @@
           "id": { "type": "string", "format": "uuid", "title": "Id" },
           "given_name": { "type": "string", "title": "Given Name" },
           "timezone": { "type": "string", "title": "Timezone" },
-          "avatar_url": { "type": "string", "title": "Avatar Url" }
+          "avatar_url": { "type": "string", "title": "Avatar Url" },
+          "preffered_working_hours": {
+            "prefixItems": [{ "type": "integer" }, { "type": "integer" }],
+            "type": "array",
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Preffered Working Hours",
+            "description": "The user's preferred working hours (in 24-hour format)."
+          }
         },
         "type": "object",
-        "required": ["id", "given_name", "timezone", "avatar_url"],
+        "required": [
+          "id",
+          "given_name",
+          "timezone",
+          "avatar_url",
+          "preffered_working_hours"
+        ],
         "title": "User"
       },
       "ValidationError": {

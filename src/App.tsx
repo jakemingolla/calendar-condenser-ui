@@ -8,6 +8,7 @@ interface User {
   given_name: string;
   timezone: string;
   avatar_url: string;
+  preffered_working_hours?: [number, number];
 }
 
 interface CalendarEvent {
@@ -264,144 +265,190 @@ export function App() {
 
   // Render state-specific content
   const renderStateContent = (state: any) => {
-    // Helper function to render calendar section
-    const renderCalendarSection = (calendar: any, currentUser: User, invitees?: User[]) => (
-      <div className="space-y-3">
-        {calendar.events && calendar.events.length > 0 ? (
-          calendar.events.map((event: any) => (
-            <div key={event.id} className="p-4 bg-gray-50 rounded-lg border">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <h5 className="font-medium text-gray-900 mb-1">{event.title}</h5>
-                  {event.description && (
-                    <p className="text-sm text-gray-600 mb-2">{event.description}</p>
-                  )}
-                  
-                  {/* Time Information */}
-                  <div className="text-center mb-2">
-                    <p className="text-sm text-gray-600">
-                      Starts at <span className="font-semibold">{new Date(event.start_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span> and ends at <span className="font-semibold">{new Date(event.end_time).toLocaleTimeString([], {hour: 'numeric', hour12: true})}</span>.
-                    </p>
-                  </div>
-                  
-                  {/* Host Information */}
-                  <div className="flex items-center justify-center space-x-2 mb-2">
-                    <span className="text-sm font-medium text-gray-700">Hosted by:</span>
-                    <div className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                      <img 
-                        src={currentUser.avatar_url} 
-                        alt={`${currentUser.given_name}'s avatar`}
-                        className="w-8 h-8 rounded-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMzIiIGN5PSIzMiIgcj0iMzIiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTMyIDMyQzM1LjMxMzcgMzIgMzggMjkuMzEzNyAzOCAyNkMzOCAyMi42ODYzIDM1LjMxMzcgMjAgMzIgMjBDMjguNjg2MyAyMCAyNiAyMi42ODYzIDI2IDI2QzI2IDI5LjMxMzcgMjguNjg2MyAzMiAzMiAzMloiIGZpbGw9IiN5Q0EzQUYiLz4KPHBhdGggZD0iTTMyIDM0QzI0LjI2ODcgMzQgMTggNDAuMjY4NyAxOCA0OEg0NkM0NiA0MC4yNjg3IDM5LjczMTMgMzQgMzIgMzRaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=';
-                        }}
-                      />
-                      <span className="text-sm font-medium text-gray-700">{currentUser.given_name}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="text-xs text-gray-500 space-y-1">
-                    {/* Invitees Section */}
-                    {invitees && invitees.length > 0 ? (
-                      <div className="flex items-center justify-center space-x-2">
-                        <span className="text-sm font-medium text-gray-700">Invitees:</span>
-                        <div className="flex flex-wrap gap-2">
-                          {invitees.map((invitee) => (
-                            <div key={invitee.id} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                              <img 
-                                src={invitee.avatar_url} 
-                                alt={`${invitee.given_name}'s avatar`}
-                                className="w-4 h-4 rounded-full object-cover"
-                                onError={(e) => {
-                                  e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
-                                }}
-                              />
-                              <span className="text-xs text-gray-700">{invitee.given_name}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ) : event.invitees && event.invitees.length > 0 ? (
-                      <div className="flex items-center justify-center space-x-2">
-                        <span className="text-sm font-medium text-gray-700">Invitees:</span>
-                        <div className="flex flex-wrap gap-2">
-                          {event.invitees.map((invitee: any) => {
-                            const userId = invitee.id;
-                            const userData = inviteeUsers[userId];
-                            const isLoading = loadingInvitees[userId];
-                            
-                            // Fetch user data if not already loaded
-                            if (!userData && !isLoading) {
-                              fetchInviteeUser(userId);
-                            }
-                            
-                            if (isLoading) {
-                              return (
-                                <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
-                                  <div className="w-20 h-4 bg-gray-200 rounded animate-pulse"></div>
-                                </div>
-                              );
-                            }
-                            
-                            if (userData) {
-                              return (
-                                <div key={userId} className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-full">
-                                  <img 
-                                    src={userData.avatar_url} 
-                                    alt={`${userData.given_name}'s avatar`}
-                                    className="w-8 h-8 rounded-full object-cover"
-                                    onError={(e) => {
-                                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1zbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
-                                    }}
-                                  />
-                                  <span className="text-sm font-medium text-gray-700">{userData.given_name}</span>
-                                </div>
-                              );
-                            }
-                            
-                            return null;
-                          })}
-                        </div>
-                      </div>
-                    ) : (
-                      <p>👥 No invitees</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="text-gray-500 italic text-sm">
+    // Helper function to render time-based calendar section
+    const renderTimeBasedCalendar = (calendar: any, currentUser: User, invitees?: User[], inviteeCalendars?: Record<string, Calendar>) => {
+      if (!calendar.events || calendar.events.length === 0) {
+        return (
+          <div className="text-gray-500 italic text-sm text-center py-8">
             No events scheduled for this date
           </div>
-        )}
-      </div>
-    );
+        );
+      }
+
+      // Get all events from all calendars
+      const allEvents = [calendar.events, ...Object.values(inviteeCalendars || {}).map(cal => cal.events || [])].flat();
+      
+      // Find time range for the day based on user's preferred working hours
+      const startHour = currentUser.preffered_working_hours?.[0] || 6; // Default to 6 AM if not specified
+      const endHour = currentUser.preffered_working_hours?.[1] || 22; // Default to 10 PM if not specified
+      const hourRange = endHour - startHour;
+      
+      // Create time slots
+      const timeSlots = Array.from({ length: hourRange }, (_, i) => startHour + i);
+      
+      // Helper function to get hour from time string
+      const getHourFromTime = (timeString: string) => {
+        return new Date(timeString).getHours();
+      };
+      
+      // Helper function to get minutes from time string
+      const getMinutesFromTime = (timeString: string) => {
+        return new Date(timeString).getMinutes();
+      };
+      
+      // Helper function to calculate position and height for an event
+      const getEventPosition = (event: any) => {
+        const eventStartHour = getHourFromTime(event.start_time);
+        const startMinutes = getMinutesFromTime(event.start_time);
+        const eventEndHour = getHourFromTime(event.end_time);
+        const endMinutes = getMinutesFromTime(event.end_time);
+        
+        const startPosition = ((eventStartHour - startHour) * 60 + startMinutes) / 60;
+        const duration = ((eventEndHour - eventStartHour) * 60 + (endMinutes - startMinutes)) / 60;
+        
+        return { top: startPosition, height: duration };
+      };
+
+      return (
+        <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+          {/* Header with user avatars */}
+          <div className="bg-gray-50 border-b p-4">
+            <div className="flex items-center ml-16">
+              {/* Current user */}
+              <div className="flex-1 flex flex-col items-center space-y-2">
+                <img 
+                  src={currentUser.avatar_url} 
+                  alt={`${currentUser.given_name}'s avatar`}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
+                  onError={(e) => {
+                    e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
+                  }}
+                />
+                <span className="text-sm font-medium text-gray-700">{currentUser.given_name}</span>
+              </div>
+              
+              {/* Invitees */}
+              {invitees?.map((invitee) => (
+                <div key={invitee.id} className="flex-1 flex flex-col items-center space-y-2">
+                  <img 
+                    src={invitee.avatar_url} 
+                    alt={`${invitee.given_name}'s avatar`}
+                    className="w-12 h-12 rounded-full object-cover border-2 border-gray-300"
+                    onError={(e) => {
+                      e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjY0IiBjeT0iNjQiIHI9IjY0IiBmaWxsPSIjRDNEN0QwIi8+CjxwYXRoIGQ9Ik02NCA2NEM2Ny4zMTM3IDY0IDcwIDYxLjMxMzcgNzAgNThDNzAgNTQuNjg2MyA2Ny4zMTM3IDUyIDY0IDUyQzYwLjY4NjMgNTIgNTggNTQuNjg2MyA1OCA1OEM1OCA2MS4zMTM3IDYwLjY4NjMgNjQgNjQgNjRaIiBmaWxsPSIjOUNBM0FGIi8+CjxwYXRoIGQ9Ik02NCA2NkM1Ni4yNjg3IDY2IDUwIDcyLjI2ODcgNTAgODBINzhDNzggNzIuMjY4NyA3MS43MzEzIDY2IDY0IDY2WiIgZmlsbD0iIjlDQTNBRiIvPgo8L3N2Zz4K';
+                  }}
+                />
+                <span className="text-sm font-medium text-gray-700">{invitee.given_name}</span>
+              </div>
+            ))}
+          </div>
+          
+          {/* Calendar grid */}
+          <div className="relative" style={{ height: `${hourRange * 60}px` }}>
+            {/* Time labels */}
+            <div className="absolute left-0 top-0 w-16 h-full border-r bg-gray-50">
+              {timeSlots.map((hour) => (
+                <div 
+                  key={hour} 
+                  className="absolute left-2 text-xs text-gray-500 font-mono"
+                  style={{ top: `${(hour - startHour) * 60}px` }}
+                >
+                  {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
+                </div>
+              ))}
+            </div>
+            
+            {/* Hour grid lines */}
+            {timeSlots.map((hour) => (
+              <div 
+                key={hour} 
+                className="absolute left-16 right-0 border-t border-gray-200"
+                style={{ top: `${(hour - startHour) * 60}px` }}
+              />
+            ))}
+            
+            {/* User columns */}
+            <div className="ml-16 h-full flex">
+              {/* Current user column */}
+              <div className="flex-1 relative border-r border-gray-200">
+                {calendar.events.map((event: any) => {
+                  const { top, height } = getEventPosition(event);
+                  return (
+                    <div
+                      key={event.id}
+                      className="absolute left-1 right-1 bg-blue-100 border border-blue-300 rounded p-2 text-xs overflow-hidden"
+                      style={{ 
+                        top: `${top * 60}px`, 
+                        height: `${height * 60}px`,
+                        minHeight: '20px'
+                      }}
+                    >
+                      <div className="font-medium text-blue-900 truncate">{event.title}</div>
+                      <div className="text-blue-700 text-xs">
+                        {new Date(event.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit', hour12: true})} - 
+                        {new Date(event.end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit', hour12: true})}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              
+              {/* Invitee columns */}
+              {invitees?.map((invitee) => {
+                const inviteeCalendar = inviteeCalendars?.[invitee.id];
+                return (
+                  <div key={invitee.id} className="flex-1 relative border-r border-gray-200 last:border-r-0">
+                    {inviteeCalendar?.events?.map((event: any) => {
+                      const { top, height } = getEventPosition(event);
+                      return (
+                        <div
+                          key={event.id}
+                          className="absolute left-1 right-1 bg-gray-100 border border-gray-300 rounded p-2 text-xs overflow-hidden"
+                          style={{ 
+                            top: `${top * 60}px`, 
+                            height: `${height * 60}px`,
+                            minHeight: '20px'
+                          }}
+                        >
+                          <div className="font-medium text-gray-900 truncate">{event.title}</div>
+                          <div className="text-gray-700 text-xs">
+                            {new Date(event.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit', hour12: true})} - 
+                            {new Date(event.end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit', hour12: true})}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          </div>
+        </div>
+      );
+    };
 
     // Handle different state types
     if (state.type === 'InitialState') {
       // Nothing to show for initial state
-      const initialState = state as any;
       return null;
     }
 
     if (state.type === 'StateWithCalendar') {
       const calendarState = state as StateWithCalendar;
-      return renderCalendarSection(calendarState.calendar, calendarState.user);
+      return renderTimeBasedCalendar(calendarState.calendar, calendarState.user);
     }
 
     if (state.type === 'StateWithInvitees') {
       const inviteeState = state as StateWithInvitees;
-      return renderCalendarSection(inviteeState.calendar, inviteeState.user, inviteeState.invitees);
+      return renderTimeBasedCalendar(inviteeState.calendar, inviteeState.user, inviteeState.invitees, inviteeState.invitee_calendars);
     }
 
     if (state.type === 'StateWithPendingReschedulingProposals') {
       const reschedulingState = state as StateWithPendingReschedulingProposals;
       return (
         <>
-          {renderCalendarSection(reschedulingState.calendar, reschedulingState.user, reschedulingState.invitees)}
+          {renderTimeBasedCalendar(reschedulingState.calendar, reschedulingState.user, reschedulingState.invitees, reschedulingState.invitee_calendars)}
           
           {/* Pending Rescheduling Proposals */}
           <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
@@ -426,7 +473,7 @@ export function App() {
       const completedState = state as StateWithCompletedReschedulingProposals;
       return (
         <>
-          {renderCalendarSection(completedState.calendar, completedState.user, completedState.invitees)}
+          {renderTimeBasedCalendar(completedState.calendar, completedState.user, completedState.invitees, completedState.invitee_calendars)}
           
           {/* Completed Rescheduling Proposals */}
           <div className="bg-green-50 p-6 rounded-lg border border-green-200">
