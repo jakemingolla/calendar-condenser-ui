@@ -34,18 +34,28 @@
         }
       }
     },
-    "/api/v1/graphs/{graph_id}/stream": {
+    "/api/v1/graphs/{graph_id}/threads/{thread_id}/stream": {
       "post": {
         "tags": ["graphs"],
         "summary": "Stream graph execution results",
         "description": "Streams the execution results from a graph, including:\n\n    - **State updates**: Various state objects (InitialState, StateWithCalendar, etc.)\n      that show the progression through the graph execution\n    - **AI messages**: AIMessageChunk objects containing AI-generated responses\n\n    The response is a stream where each line contains a JSON object.",
-        "operationId": "stream_api_v1_graphs__graph_id__stream_post",
+        "operationId": "stream_api_v1_graphs__graph_id__threads__thread_id__stream_post",
         "parameters": [
           {
             "name": "graph_id",
             "in": "path",
             "required": true,
             "schema": { "type": "string", "title": "Graph Id" }
+          },
+          {
+            "name": "thread_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Thread Id"
+            }
           }
         ],
         "responses": {
@@ -68,7 +78,7 @@
                       "$ref": "#/components/schemas/StateWithCompletedReschedulingProposals"
                     }
                   ],
-                  "title": "Response Stream Api V1 Graphs  Graph Id  Stream Post"
+                  "title": "Response Stream Api V1 Graphs  Graph Id  Threads  Thread Id  Stream Post"
                 }
               }
             }

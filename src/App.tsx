@@ -1,5 +1,5 @@
 import "./index.css";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 
 // Type definitions based on the OpenAPI schema
@@ -76,6 +76,15 @@ interface TimelineItem {
   messageId?: string; // For AI messages, track the message ID to group chunks
 }
 
+// Function to generate a random UUID
+function generateUUID(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 export function App() {
   const [isStarted, setIsStarted] = useState(false);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -88,6 +97,12 @@ export function App() {
   >({});
   const [seenStateTypes, setSeenStateTypes] = useState<Set<string>>(new Set());
   const seenStateIdsRef = useRef<Set<string>>(new Set());
+  const [threadId] = useState<string>(() => generateUUID());
+
+  // Generate thread_id once at startup
+  useEffect(() => {
+    console.log(`Generated thread_id: ${threadId}`);
+  }, [threadId]);
 
   // Function to fetch user information for invitees
   const fetchInviteeUser = async (userId: string) => {
@@ -110,6 +125,22 @@ export function App() {
     }
   };
 
+  // Function to handle accepting a rescheduling proposal
+  const handleAcceptRescheduling = async (proposal: any, index: number) => {
+    console.log("Accepting rescheduling proposal:", proposal);
+    // TODO: Implement API call to accept the proposal
+    // For now, just log the action
+    alert(`Accepted rescheduling for: ${proposal.original_event?.title}`);
+  };
+
+  // Function to handle rejecting a rescheduling proposal
+  const handleRejectRescheduling = async (proposal: any, index: number) => {
+    console.log("Rejecting rescheduling proposal:", proposal);
+    // TODO: Implement API call to reject the proposal
+    // For now, just log the action
+    alert(`Rejected rescheduling for: ${proposal.original_event?.title}`);
+  };
+
   const handleStart = async () => {
     setIsStarted(true);
     setTimeline([]);
@@ -118,7 +149,7 @@ export function App() {
 
     try {
       const response = await fetch(
-        "http://localhost:8000/api/v1/graphs/default/stream",
+        `http://localhost:8000/api/v1/graphs/default/threads/${threadId}/stream`,
         {
           method: "POST",
           headers: {
@@ -394,7 +425,7 @@ export function App() {
       return (
         <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
           {/* Header with user avatars */}
-          <div className="bg-gray-50 border-b p-4">
+          <div className="bg-gray-50 p-4">
             <div className="flex items-center ml-16">
               {/* Current user */}
               <div className="flex-1 flex flex-col items-center space-y-2">
@@ -568,9 +599,9 @@ export function App() {
                             className="absolute z-20"
                             style={{
                               left: "50%",
-                              top: `${(top + height) * 60 + 10}px`,
+                              top: `${(top + height) * 60}px`,
                               width: "24px",
-                              height: "24px",
+                              height: `${(newStartPosition - (top + height)) * 60}px`,
                               transform: "translateX(-50%)",
                             }}
                             viewBox="0 0 24 24"
@@ -578,7 +609,7 @@ export function App() {
                             xmlns="http://www.w3.org/2000/svg"
                           >
                             <path
-                              d="M12 2 C12 8 12 14 12 20 M12 20 L8 16 M12 20 L16 16"
+                              d="M12 0 L12 24 M12 24 L8 20 M12 24 L16 20"
                               stroke="black"
                               strokeWidth="2"
                               strokeLinecap="round"
@@ -737,31 +768,44 @@ export function App() {
           )}
 
           {/* Pending Rescheduling Proposals */}
-          <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-200">
-            <h4 className="font-medium text-yellow-900 mb-3">
-              ⏳ Pending Rescheduling Proposals (
-              {reschedulingState.pending_rescheduling_proposals.length})
-            </h4>
-            <div className="space-y-2 text-sm text-yellow-800">
-              {reschedulingState.pending_rescheduling_proposals.map(
-                (proposal, index) => (
-                  <div key={index} className="p-3 bg-yellow-100 rounded">
-                    <p>
-                      <strong>Event:</strong>{" "}
-                      {proposal.original_event?.title || "Unknown Event"}
-                    </p>
-                    <p>
-                      <strong>New Time:</strong>{" "}
-                      {new Date(proposal.new_start_time).toLocaleString()} -{" "}
-                      {new Date(proposal.new_end_time).toLocaleString()}
-                    </p>
-                    <p>
-                      <strong>Reason:</strong> {proposal.explanation}
-                    </p>
+          <div className="mt-8 space-y-3 text-sm text-gray-700">
+            {reschedulingState.pending_rescheduling_proposals.map(
+              (proposal, index) => (
+                <div key={index} className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
+                  <p>
+                    <strong>Event:</strong>{" "}
+                    {proposal.original_event?.title || "Unknown Event"}
+                  </p>
+                  <p>
+                    <strong>Time Change:</strong>{" "}
+                    <span className="text-red-600 font-medium">
+                      {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                    </span>
+                    {" → "}
+                    <span className="text-green-600 font-medium">
+                      {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                    </span>
+                  </p>
+                  <p>
+                    <strong>Reason:</strong> {proposal.explanation}
+                  </p>
+                  <div className="flex gap-3 mt-4 justify-center">
+                    <button
+                      onClick={() => handleAcceptRescheduling(proposal, index)}
+                      className="px-4 py-2 bg-gray-100 text-green-700 text-sm rounded-md hover:bg-green-50 transition-all duration-200 font-medium"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => handleRejectRescheduling(proposal, index)}
+                      className="px-4 py-2 bg-gray-100 text-red-700 text-sm rounded-md hover:bg-red-50 transition-all duration-200 font-medium"
+                    >
+                      Reject
+                    </button>
                   </div>
-                )
-              )}
-            </div>
+                </div>
+              )
+            )}
           </div>
         </>
       );
@@ -795,9 +839,14 @@ export function App() {
                       {proposal.original_event?.title || "Unknown Event"}
                     </p>
                     <p>
-                      <strong>New Time:</strong>{" "}
-                      {new Date(proposal.new_start_time).toLocaleString()} -{" "}
-                      {new Date(proposal.new_end_time).toLocaleString()}
+                      <strong>Time Change:</strong>{" "}
+                      <span className="text-red-600 font-medium">
+                        {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                      </span>
+                      {" → "}
+                      <span className="text-green-600 font-medium">
+                        {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                      </span>
                     </p>
                     <p>
                       <strong>Status:</strong>{" "}
