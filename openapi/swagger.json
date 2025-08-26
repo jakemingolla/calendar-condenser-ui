@@ -350,6 +350,17 @@
         ],
         "title": "RejectedRescheduledEvent"
       },
+      "ResponseMetadata": {
+        "properties": {
+          "finish_reason": {
+            "type": "string",
+            "const": "stop",
+            "title": "Finish Reason"
+          }
+        },
+        "type": "object",
+        "title": "ResponseMetadata"
+      },
       "StateWithCalendar": {
         "properties": {
           "date": { "type": "string", "format": "date-time", "title": "Date" },
@@ -484,10 +495,13 @@
           },
           "additional_kwargs": {
             "$ref": "#/components/schemas/AdditionalKwargs"
+          },
+          "response_metadata": {
+            "$ref": "#/components/schemas/ResponseMetadata"
           }
         },
         "type": "object",
-        "required": ["content", "id", "additional_kwargs"],
+        "required": ["content", "id", "additional_kwargs", "response_metadata"],
         "title": "StreamlinedAIMessageChunk"
       },
       "User": {

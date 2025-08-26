@@ -96,6 +96,7 @@ export function App() {
     Record<string, boolean>
   >({});
   const [seenStateTypes, setSeenStateTypes] = useState<Set<string>>(new Set());
+  const [waitingForNextState, setWaitingForNextState] = useState(false);
   const seenStateIdsRef = useRef<Set<string>>(new Set());
   const [threadId] = useState<string>(() => generateUUID());
   const timelineContainerRef = useRef<HTMLDivElement>(null);
@@ -165,6 +166,7 @@ export function App() {
     setIsStarted(true);
     setTimeline([]);
     setSeenStateTypes(new Set());
+    setWaitingForNextState(false);
     seenStateIdsRef.current = new Set();
 
     try {
@@ -199,6 +201,11 @@ export function App() {
             const data = JSON.parse(line);
 
             if (data.type === "AIMessageChunk") {
+              // Check if this is the final message chunk (finish_reason: stop)
+              if (data.response_metadata?.finish_reason === "stop") {
+                setWaitingForNextState(true);
+              }
+
               // Add or update AI message in timeline using the id field
               setTimeline((prev) => {
                 const messageId = data.id;
@@ -244,9 +251,10 @@ export function App() {
 
               // Check if this exact state has been seen before
               if (!seenStateIdsRef.current.has(stateId)) {
-                // First time seeing this state - add to timeline and mark as seen
+                // First time seeing this state - add to timeline, mark as seen, and reset waiting flag
                 console.log(`Adding new state to timeline: ${data.type}`);
                 seenStateIdsRef.current.add(stateId);
+                setWaitingForNextState(false);
 
                 setTimeline((prev) => [
                   ...prev,
@@ -260,6 +268,7 @@ export function App() {
                 ]);
               } else {
                 console.log(`Skipping duplicate state: ${data.type}`);
+                // Don't reset waitingForNextState for duplicate states
               }
 
               // Always update current state for rendering
@@ -552,7 +561,7 @@ export function App() {
                         <div key={event.id} className="relative">
                           {/* Proposed new time slot (green) */}
                           <div
-                            className="absolute left-1 right-1 bg-green-100 border-2 border-green-400 rounded p-1 text-xs overflow-hidden z-10 shadow-md"
+                            className="absolute left-1 right-1 bg-green-100 border border-green-400 rounded p-1 text-xs overflow-hidden z-10 shadow-md"
                             style={{
                               top: `${newStartPosition * 40}px`,
                               height: `${newDuration * 40}px`,
@@ -781,15 +790,15 @@ export function App() {
           )}
 
           {/* Pending Rescheduling Proposals */}
-          <div className="mt-4 space-y-2 text-xs text-gray-700">
+          <div className="mt-4 space-y-2 text-sm text-gray-700">
             {reschedulingState.pending_rescheduling_proposals.map(
               (proposal, index) => (
                 <div key={index} className="p-3 bg-white rounded-lg border shadow-sm">
-                  <p className="text-xs">
+                  <p className="text-sm">
                     <strong>Event:</strong>{" "}
                     <strong>{proposal.original_event?.title || "Unknown Event"}</strong>
                   </p>
-                  <p className="text-xs">
+                  <p className="text-sm">
                     <strong>Time Change:</strong>{" "}
                     <span className="text-red-600 font-medium">
                       {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
@@ -799,19 +808,19 @@ export function App() {
                       {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
                     </span>
                   </p>
-                  <p className="text-xs">
+                  <p className="text-sm">
                     <strong>Reason:</strong> {proposal.explanation}
                   </p>
                   <div className="flex gap-2 mt-2 justify-center">
                     <button
                       onClick={() => handleAcceptRescheduling(proposal, index)}
-                      className="px-3 py-1 bg-gray-100 text-green-700 text-xs rounded-md hover:bg-green-50 transition-all duration-200 font-medium"
+                      className="px-3 py-1 bg-gray-100 text-green-700 text-sm rounded-md hover:bg-green-50 transition-all duration-200 font-medium"
                     >
                       Accept
                     </button>
                     <button
                       onClick={() => handleRejectRescheduling(proposal, index)}
-                      className="px-3 py-1 bg-gray-100 text-red-700 text-xs rounded-md hover:bg-red-50 transition-all duration-200 font-medium"
+                      className="px-3 py-1 bg-gray-100 text-red-700 text-sm rounded-md hover:bg-red-50 transition-all duration-200 font-medium"
                     >
                       Reject
                     </button>
@@ -934,10 +943,23 @@ export function App() {
                   <strong>Current State Type:</strong>{" "}
                   {currentState?.type || "None"}
                 </p>
+                <p className="text-xs">
+                  <strong>Waiting for Next State:</strong>{" "}
+                  {waitingForNextState ? "Yes" : "No"}
+                </p>
               </div>
 
               {/* Render timeline items in chronological order */}
               {timeline.map(renderTimelineItem)}
+
+              {/* Show placeholder when waiting for next state */}
+              {waitingForNextState && (
+                <div className="p-4 rounded-lg mb-3">
+                  <div className="animate-pulse">
+                    <div className="h-32 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 rounded"></div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
