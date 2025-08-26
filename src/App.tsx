@@ -66,11 +66,24 @@ interface StateWithCompletedReschedulingProposals {
   completed_rescheduling_proposals: any[];
 }
 
+// New interfaces for interrupt handling
+interface Interrupt {
+  type: "interrupt";
+  value: string;
+  id: string;
+}
+
+interface Resume {
+  type: "resume";
+  value: string;
+  id: string;
+}
+
 // Timeline item interface
 interface TimelineItem {
   id: string;
   timestamp: number;
-  type: "ai_message" | "state_change";
+  type: "ai_message" | "state_change" | "interrupt";
   content: any;
   stateType?: string; // For state changes, track the type
   messageId?: string; // For AI messages, track the message ID to group chunks
@@ -97,6 +110,9 @@ export function App() {
   >({});
   const [seenStateTypes, setSeenStateTypes] = useState<Set<string>>(new Set());
   const [waitingForNextState, setWaitingForNextState] = useState(false);
+  const [currentInterrupt, setCurrentInterrupt] = useState<Interrupt | null>(null);
+  const [isResuming, setIsResuming] = useState(false);
+  const [selectedInterruptOptions, setSelectedInterruptOptions] = useState<Record<string, string>>({});
   const seenStateIdsRef = useRef<Set<string>>(new Set());
   const [threadId] = useState<string>(() => generateUUID());
   const timelineContainerRef = useRef<HTMLDivElement>(null);
@@ -162,11 +178,163 @@ export function App() {
     alert(`Rejected rescheduling for: ${proposal.original_event?.title}`);
   };
 
+  // Function to handle resuming from an interrupt
+  const handleResume = async (value: string) => {
+    if (!currentInterrupt) return;
+
+    setIsResuming(true);
+    setSelectedInterruptOptions({ ...selectedInterruptOptions, [currentInterrupt.id]: value });
+    setCurrentInterrupt(null);
+
+    try {
+      const resumeData: Resume = {
+        type: "resume",
+        value: value,
+        id: currentInterrupt.id
+      };
+
+      const response = await fetch(
+        `http://localhost:8000/api/v1/graphs/default/threads/${threadId}/stream`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(resumeData),
+        }
+      );
+
+      if (!response.body) {
+        throw new Error("No response body");
+      }
+
+      // Process the resumed stream
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n").filter((line) => line.trim());
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+
+            if (data.type === "AIMessageChunk") {
+              // Check if this is the final message chunk (finish_reason: stop)
+              if (data.response_metadata?.finish_reason === "stop") {
+                setWaitingForNextState(true);
+              }
+
+              // Reset resuming state when we start processing content
+              setIsResuming(false);
+              
+              // Add or update AI message in timeline using the id field
+              setTimeline((prev) => {
+                const messageId = data.id;
+                const existingIndex = prev.findIndex(
+                  (item) =>
+                    item.type === "ai_message" && item.messageId === messageId
+                );
+
+                if (existingIndex >= 0) {
+                  // Update existing AI message by appending content
+                  const updated = [...prev];
+                  updated[existingIndex] = {
+                    ...updated[existingIndex],
+                    content:
+                      updated[existingIndex].content + (data.content || ""),
+                    timestamp: Date.now(),
+                  };
+                  return updated;
+                } else {
+                  // Create new AI message
+                  return [
+                    ...prev,
+                    {
+                      id: `ai_${messageId}_${Date.now()}`,
+                      timestamp: Date.now(),
+                      type: "ai_message" as const,
+                      content: data.content || "",
+                      messageId: messageId,
+                    },
+                  ];
+                }
+              });
+            } else if (data.type === "interrupt") {
+              // Handle interrupt
+              console.log("Received interrupt:", data);
+              setCurrentInterrupt(data);
+              setWaitingForNextState(false);
+              
+              // Add interrupt to timeline
+              setTimeline((prev) => [
+                ...prev,
+                {
+                  id: `interrupt_${data.id}_${Date.now()}`,
+                  timestamp: Date.now(),
+                  type: "interrupt" as const,
+                  content: data,
+                },
+              ]);
+            } else if (data.type && data.type !== "AIMessageChunk") {
+              // Generate a unique ID for this state based on its content
+              const stateId = generateStateId(data);
+
+              console.log(
+                `Processing resumed state: ${data.type}, Generated ID: ${stateId}`
+              );
+
+              // Check if this exact state has been seen before
+              if (!seenStateIdsRef.current.has(stateId)) {
+                // First time seeing this state - add to timeline, mark as seen, and reset waiting flag
+                console.log(`Adding new resumed state to timeline: ${data.type}`);
+                seenStateIdsRef.current.add(stateId);
+                setWaitingForNextState(false);
+
+                setTimeline((prev) => [
+                  ...prev,
+                  {
+                    id: `state_${data.type}_${Date.now()}`,
+                    timestamp: Date.now(),
+                    type: "state_change" as const,
+                    content: data,
+                    stateType: data.type,
+                  },
+                ]);
+              } else {
+                console.log(`Skipping duplicate resumed state: ${data.type}`);
+              }
+
+              // Always update current state for rendering
+              setCurrentState(data);
+            }
+          } catch (e) {
+            console.error("Failed to parse JSON:", line);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error resuming:", error);
+      // Restore the interrupt if resume failed
+      setCurrentInterrupt(currentInterrupt);
+    } finally {
+      setIsResuming(false);
+    }
+  };
+
   const handleStart = async () => {
     setIsStarted(true);
     setTimeline([]);
     setSeenStateTypes(new Set());
     setWaitingForNextState(false);
+    setCurrentInterrupt(null);
+    setIsResuming(false);
+    setSelectedInterruptOptions({});
     seenStateIdsRef.current = new Set();
 
     try {
@@ -177,7 +345,6 @@ export function App() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({}),
         }
       );
 
@@ -238,6 +405,22 @@ export function App() {
                   ];
                 }
               });
+            } else if (data.type === "interrupt") {
+              // Handle interrupt
+              console.log("Received interrupt:", data);
+              setCurrentInterrupt(data);
+              setWaitingForNextState(false);
+              
+              // Add interrupt to timeline
+              setTimeline((prev) => [
+                ...prev,
+                {
+                  id: `interrupt_${data.id}_${Date.now()}`,
+                  timestamp: Date.now(),
+                  type: "interrupt" as const,
+                  content: data,
+                },
+              ]);
             } else if (data.type && data.type !== "AIMessageChunk") {
               // Generate a unique ID for this state based on its content
               const stateId = generateStateId(data);
@@ -350,6 +533,53 @@ export function App() {
           className="p-3 bg-white rounded-lg text-left mb-3 text-sm"
         >
           <ReactMarkdown>{processedContent}</ReactMarkdown>
+        </div>
+      );
+    }
+
+    if (item.type === "interrupt") {
+      const interrupt = item.content as Interrupt;
+      const isConfirmed = selectedInterruptOptions[interrupt.id] === "CONFIRMED";
+      const isRejected = selectedInterruptOptions[interrupt.id] === "REJECTED";
+      
+      return (
+        <div
+          key={item.id}
+          className="p-4 border border-yellow-200 rounded-lg text-center mb-3 bg-white"
+        >
+          <div className="flex flex-col items-center">
+            <p className="text-yellow-700 text-sm mb-3">
+              {interrupt.value}
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleResume("CONFIRMED")}
+                disabled={isResuming || isConfirmed || isRejected}
+                className={`px-4 py-2 text-sm rounded-md transition-colors duration-200 font-medium ${
+                  isConfirmed
+                    ? "bg-green-700 text-white cursor-default"
+                    : isRejected
+                    ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                    : "bg-green-600 hover:bg-green-700 text-white"
+                }`}
+              >
+                {isConfirmed ? "Confirmed" : isRejected ? "Confirm" : "Confirm"}
+              </button>
+              <button
+                onClick={() => handleResume("REJECTED")}
+                disabled={isResuming || isConfirmed || isRejected}
+                className={`px-4 py-2 text-sm rounded-md transition-colors duration-200 font-medium ${
+                  isRejected
+                    ? "bg-red-700 text-white cursor-default"
+                    : isConfirmed
+                    ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+              >
+                {isRejected ? "Rejected" : isConfirmed ? "Reject" : "Reject"}
+              </button>
+            </div>
+          </div>
         </div>
       );
     }
@@ -799,32 +1029,28 @@ export function App() {
                     <strong>{proposal.original_event?.title || "Unknown Event"}</strong>
                   </p>
                   <p className="text-sm">
-                    <strong>Time Change:</strong>{" "}
+                    <strong>Start Time Change:</strong>{" "}
                     <span className="text-red-600 font-medium">
-                      {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
+                      {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
                     </span>
                     {" → "}
                     <span className="text-green-600 font-medium">
-                      {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                      {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                    </span>
+                  </p>
+                  <p className="text-sm">
+                    <strong>End Time Change:</strong>{" "}
+                    <span className="text-red-600 font-medium">
+                      {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                    </span>
+                    {" → "}
+                    <span className="text-green-600 font-medium">
+                      {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
                     </span>
                   </p>
                   <p className="text-sm">
                     <strong>Reason:</strong> {proposal.explanation}
                   </p>
-                  <div className="flex gap-2 mt-2 justify-center">
-                    <button
-                      onClick={() => handleAcceptRescheduling(proposal, index)}
-                      className="px-3 py-1 bg-gray-100 text-green-700 text-sm rounded-md hover:bg-green-50 transition-all duration-200 font-medium"
-                    >
-                      Accept
-                    </button>
-                    <button
-                      onClick={() => handleRejectRescheduling(proposal, index)}
-                      className="px-3 py-1 bg-gray-100 text-red-700 text-sm rounded-md hover:bg-red-50 transition-all duration-200 font-medium"
-                    >
-                      Reject
-                    </button>
-                  </div>
                 </div>
               )
             )}
@@ -917,6 +1143,8 @@ export function App() {
               start
             </button>
           ) : null}
+
+
         </div>
       </div>
 
@@ -947,13 +1175,25 @@ export function App() {
                   <strong>Waiting for Next State:</strong>{" "}
                   {waitingForNextState ? "Yes" : "No"}
                 </p>
+                <p className="text-xs">
+                  <strong>Current Interrupt:</strong>{" "}
+                  {currentInterrupt ? `Yes (${currentInterrupt.value})` : "No"}
+                </p>
+                <p className="text-xs">
+                  <strong>Selected Option:</strong>{" "}
+                  {Object.values(selectedInterruptOptions).join(", ") || "None"}
+                </p>
+                <p className="text-xs">
+                  <strong>Is Resuming:</strong>{" "}
+                  {isResuming ? "Yes" : "No"}
+                </p>
               </div>
 
               {/* Render timeline items in chronological order */}
               {timeline.map(renderTimelineItem)}
 
-              {/* Show placeholder when waiting for next state */}
-              {waitingForNextState && (
+              {/* Show placeholder when waiting for next state or resuming */}
+              {(waitingForNextState || isResuming) && (
                 <div className="p-4 rounded-lg mb-3">
                   <div className="animate-pulse">
                     <div className="h-32 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 rounded"></div>

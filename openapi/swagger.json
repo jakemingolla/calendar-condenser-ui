@@ -58,6 +58,19 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  { "$ref": "#/components/schemas/Resume" },
+                  { "type": "null" }
+                ],
+                "title": "Resume"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Stream of graph execution states and AI messages",
@@ -76,7 +89,8 @@
                     },
                     {
                       "$ref": "#/components/schemas/StateWithCompletedReschedulingProposals"
-                    }
+                    },
+                    { "$ref": "#/components/schemas/Interrupt" }
                   ],
                   "title": "Response Stream Api V1 Graphs  Graph Id  Threads  Thread Id  Stream Post"
                 }
@@ -282,6 +296,29 @@
         "required": ["date", "user"],
         "title": "InitialState"
       },
+      "Interrupt": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "interrupt",
+            "title": "Type",
+            "default": "interrupt"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "The content of the interrupt"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The id of the interrupt"
+          }
+        },
+        "type": "object",
+        "required": ["value", "id"],
+        "title": "Interrupt"
+      },
       "PendingRescheduledEvent": {
         "properties": {
           "type": { "type": "string", "title": "Type", "default": "" },
@@ -360,6 +397,29 @@
         },
         "type": "object",
         "title": "ResponseMetadata"
+      },
+      "Resume": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "resume",
+            "title": "Type",
+            "default": "resume"
+          },
+          "value": {
+            "type": "string",
+            "title": "Value",
+            "description": "The content of the resume"
+          },
+          "id": {
+            "type": "string",
+            "title": "Id",
+            "description": "The corresponding Interrupt id"
+          }
+        },
+        "type": "object",
+        "required": ["value", "id"],
+        "title": "Resume"
       },
       "StateWithCalendar": {
         "properties": {
