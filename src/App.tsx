@@ -137,7 +137,7 @@ type StateKey =
   | "$.get_rescheduling_proposals"
   | "$.confirm_rescheduling_proposals"
   | "$.invoke_send_rescheduling_proposal_to_invitee"
-  | "$.final_summarization";
+  | "$.conclusion";
 
 // Accumulated state interface
 interface AccumulatedState {
@@ -168,11 +168,12 @@ interface Resume {
 interface TimelineItem {
   id: string;
   timestamp: number;
-  type: "ai_message" | "state_update" | "interrupt" | "response";
+  type: "ai_message" | "state_update" | "interrupt" | "response" | "subgraph_status";
   content: any;
   stateKey?: StateKey; // For state updates, track the state key
   messageId?: string; // For AI messages, track the message ID to group chunks
   responseType?: string; // For responses, track the response type
+  subgraphUuid?: string; // For subgraph status items, track the subgraph UUID
 }
 
 // Function to generate a random UUID
@@ -450,6 +451,13 @@ const MessageStatusComponent = ({
           </span>
         </div>
       </div>
+      
+      {/* Hover to view text - only show when message has been analyzed */}
+      {analyzed && (
+        <div className="mt-2 text-center">
+          <span className="text-xs text-gray-400 italic">(Hover to view)</span>
+        </div>
+      )}
       </div>
       
       {/* Conversation Tooltip */}
@@ -655,6 +663,39 @@ export function App() {
       
       return updated;
     });
+
+    // Add subgraph message status to timeline when first created or when analysis is complete
+    if (stage === 'send_message' || (stage === 'analyze_message' && data.message_analysis)) {
+      setTimeline(prev => {
+        // Check if this subgraph already exists in timeline
+        const existingIndex = prev.findIndex(item => 
+          item.type === 'subgraph_status' && item.subgraphUuid === uuid
+        );
+
+        if (existingIndex >= 0) {
+          // Update existing timeline item
+          const updated = [...prev];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            timestamp: Date.now(),
+            content: { uuid, stage, data }
+          };
+          return updated;
+        } else {
+          // Add new timeline item
+          return [
+            ...prev,
+            {
+              id: `subgraph_${uuid}_${Date.now()}`,
+              timestamp: Date.now(),
+              type: 'subgraph_status' as const,
+              content: { uuid, stage, data },
+              subgraphUuid: uuid
+            }
+          ];
+        }
+      });
+    }
   };
 
   // Helper function to update accumulated state from response objects
@@ -1167,6 +1208,7 @@ export function App() {
       );
     }
 
+
     return null;
   };
 
@@ -1264,7 +1306,7 @@ export function App() {
       case "$.get_rescheduling_proposals": return "Get Rescheduling Proposals";
       case "$.confirm_rescheduling_proposals": return "Confirm Rescheduling Proposals";
       case "$.invoke_send_rescheduling_proposal_to_invitee": return "Send Rescheduling Proposal";
-      case "$.final_summarization": return "Final Summarization";
+      case "$.conclusion": return "Conclusion";
       default: return stateKey;
     }
   };
@@ -2122,29 +2164,60 @@ export function App() {
               </div>
 
               {/* Render timeline items in chronological order */}
-              {timeline.map(renderTimelineItem)}
+              {timeline.map((item, index) => {
+                // Group consecutive subgraph_status items together
+                if (item.type === 'subgraph_status') {
+                  // Check if this is the first subgraph_status in a group
+                  const prevItem = index > 0 ? timeline[index - 1] : null;
+                  const nextItem = index < timeline.length - 1 ? timeline[index + 1] : null;
+                  
+                  // If previous item is not subgraph_status, this is the start of a group
+                  if (!prevItem || prevItem.type !== 'subgraph_status') {
+                    // Find all consecutive subgraph_status items
+                    const subgraphGroup = [];
+                    for (let i = index; i < timeline.length; i++) {
+                      if (timeline[i].type === 'subgraph_status') {
+                        subgraphGroup.push(timeline[i]);
+                      } else {
+                        break;
+                      }
+                    }
+                    
+                    // Render the group as a single container
+                    return (
+                      <div key={`subgraph-group-${index}`} className="w-full mb-3">
+                        <div className="flex flex-wrap gap-3 justify-center">
+                          {subgraphGroup.map((subgraphItem) => {
+                            const { uuid } = subgraphItem.content;
+                            const status = subgraphMessages[uuid];
+                            const conversation = conversations[status?.toUser?.id] || [];
+                            
+                            if (status) {
+                              return (
+                                <MessageStatusComponent 
+                                  key={subgraphItem.id}
+                                  status={status} 
+                                  conversation={conversation}
+                                />
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  // Skip this item since it's part of a group that was already rendered
+                  return null;
+                }
+                
+                // Render non-subgraph items normally
+                return renderTimelineItem(item);
+              })}
 
-              {/* Display subgraph messages */}
-              {Object.keys(subgraphMessages).length > 0 && (
-                <div className="mt-4">
-                  <div className="flex flex-wrap gap-3 justify-center">
-                    {Object.values(subgraphMessages).map((status) => {
-                      // Find conversation for this user
-                      const conversation = conversations[status.toUser.id] || [];
-                      return (
-                        <MessageStatusComponent 
-                          key={status.uuid} 
-                          status={status} 
-                          conversation={conversation}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Show placeholder when waiting for next state or resuming, but not when we have subgraph messages */}
-              {(waitingForNextState || isResuming) && Object.keys(subgraphMessages).length === 0 && (
+              {/* Show placeholder when waiting for next state or resuming */}
+              {(waitingForNextState || isResuming) && (
                 <div className="p-4 rounded-lg mb-3">
                   <div className="animate-pulse">
                     <div className="h-32 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 rounded"></div>

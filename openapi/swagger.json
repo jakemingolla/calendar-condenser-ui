@@ -148,7 +148,7 @@
                     {
                       "type": "object",
                       "additionalProperties": { "type": "null" },
-                      "propertyNames": { "const": "$.final_summarization" }
+                      "propertyNames": { "const": "$.conclusion" }
                     },
                     {
                       "type": "object",
