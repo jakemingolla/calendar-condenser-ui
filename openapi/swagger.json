@@ -38,7 +38,7 @@
       "post": {
         "tags": ["graphs"],
         "summary": "Stream graph execution results",
-        "description": "Streams the execution results from a graph, including:\n\n    - **State updates**: Various state objects (InitialState, StateWithCalendar, etc.)\n      that show the progression through the graph execution\n    - **AI messages**: AIMessageChunk objects containing AI-generated responses\n\n    The response is a stream where each line contains a JSON object.",
+        "description": "Streams the execution results from a graph, including:\n\n    - **State updates**: Changes to the state of the graph or subgraphs\n    - **AI messages**: AIMessageChunk objects containing AI-generated responses\n    - **Interrupts**: Used when the graph is waiting for user input\n\n    The response is a stream where each line contains a JSON object.",
         "operationId": "stream_api_v1_graphs__graph_id__threads__thread_id__stream_post",
         "parameters": [
           {
@@ -80,6 +80,11 @@
                   "anyOf": [
                     {
                       "$ref": "#/components/schemas/StreamlinedAIMessageChunk"
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": { "const": "$.load_user" }
                     },
                     {
                       "type": "object",

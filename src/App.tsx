@@ -1,5 +1,5 @@
 import "./index.css";
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 
 // Type definitions based on the OpenAPI schema
@@ -30,6 +30,11 @@ interface Calendar {
 }
 
 // New response interfaces based on the updated OpenAPI schema
+interface LoadUserResponse {
+  type: string;
+  user: User;
+}
+
 interface LoadCalendarResponse {
   type: string;
   calendar: Calendar;
@@ -84,6 +89,7 @@ interface IncomingMessage {
 
 // State key types for the new stream format
 type StateKey = 
+  | "$.load_user"
   | "$.introduction"
   | "$.confirm_start"
   | "$.load_calendar"
@@ -224,12 +230,23 @@ export function App() {
       const newState = { ...prev };
       
       switch (stateKey) {
+        case "$.load_user":
+          if (data && data.user) {
+            newState.user = data.user;
+          }
+          break;
         case "$.load_calendar":
           if (data && data.calendar) {
             newState.calendar = data.calendar;
-            // Extract user and date from calendar if available
-            if (data.calendar.owner) {
-              newState.user = { ...newState.user, id: data.calendar.owner } as User;
+            // Only set user from calendar if we don't already have user data
+            if (!newState.user && data.calendar.owner) {
+              newState.user = { 
+                id: data.calendar.owner,
+                given_name: "User",
+                timezone: "UTC",
+                avatar_url: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=",
+                preffered_working_hours: [9, 17]
+              } as User;
             }
           }
           break;
@@ -259,9 +276,24 @@ export function App() {
       const newState = { ...prev };
       
       switch (data.type) {
+        case "LoadUserResponse":
+          if (data.user) {
+            newState.user = data.user;
+          }
+          break;
         case "LoadCalendarResponse":
           if (data.calendar) {
             newState.calendar = data.calendar;
+            // Only set user from calendar if we don't already have user data
+            if (!newState.user && data.calendar.owner) {
+              newState.user = {
+                id: data.calendar.owner,
+                given_name: "User",
+                timezone: "UTC",
+                avatar_url: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=",
+                preffered_working_hours: [9, 17]
+              } as User;
+            }
           }
           break;
         case "LoadInviteesResponse":
@@ -285,6 +317,11 @@ export function App() {
               newState.conversations[conversationKey] = [];
             }
             newState.conversations[conversationKey].push(data.sent_message);
+            
+            // Extract current user from sent message
+            if (data.sent_message.from_user) {
+              newState.user = data.sent_message.from_user;
+            }
           }
           break;
         case "ReceiveMessageResponse":
@@ -654,9 +691,9 @@ export function App() {
           className="p-4 border border-yellow-200 rounded-lg text-center mb-3 bg-white"
         >
           <div className="flex flex-col items-center">
-            <p className="text-yellow-700 text-sm mb-3">
-              {interrupt.value}
-            </p>
+            <div className="text-yellow-700 text-sm mb-3">
+              <ReactMarkdown>{interrupt.value}</ReactMarkdown>
+            </div>
             <div className="flex gap-2">
               <button
                 onClick={() => handleResume("CONFIRMED")}
@@ -693,7 +730,7 @@ export function App() {
     if (item.type === "state_update") {
       return (
         <div key={item.id} className="w-full mb-3">
-          {renderStateUpdate(item.stateKey!, item.content)}
+          {renderStateUpdate(item.stateKey!, item.content, item)}
         </div>
       );
     }
@@ -701,7 +738,7 @@ export function App() {
     if (item.type === "response") {
       return (
         <div key={item.id} className="w-full mb-3">
-          {renderResponse(item.responseType!, item.content)}
+          {renderResponse(item.responseType!, item.content, item)}
         </div>
       );
     }
@@ -710,19 +747,31 @@ export function App() {
   };
 
   // Render state update based on state key
-  const renderStateUpdate = (stateKey: StateKey, content: any) => {
+  const renderStateUpdate = (stateKey: StateKey, content: any, timelineItem: TimelineItem) => {
     if (content === null) {
       // Don't show anything for null state updates - these are internal processing steps
       return null;
     }
 
+    // Build cumulative state up to this timeline item
+    const cumulativeState = buildCumulativeState(timelineItem);
+    console.log(`renderStateUpdate for ${stateKey} with cumulative state:`, {
+      hasUser: !!cumulativeState.user,
+      hasCalendar: !!cumulativeState.calendar,
+      hasInvitees: !!cumulativeState.invitees,
+      hasInviteeCalendars: !!cumulativeState.invitee_calendars,
+      hasProposals: !!cumulativeState.pending_rescheduling_proposals
+    });
+
     switch (stateKey) {
+      case "$.load_user":
+        return renderUserUpdate(content);
       case "$.load_calendar":
-        return renderCalendarUpdate(content);
+        return renderCalendarUpdate(content, cumulativeState);
       case "$.load_invitees":
-        return renderInviteesUpdate(content);
+        return renderInviteesUpdate(content, cumulativeState);
       case "$.get_rescheduling_proposals":
-        return renderReschedulingProposalsUpdate(content);
+        return renderReschedulingProposalsUpdate(content, cumulativeState);
       default:
         return (
           <div className="p-3 bg-gray-100 rounded-lg text-sm">
@@ -736,14 +785,26 @@ export function App() {
   };
 
   // Render response based on response type
-  const renderResponse = (responseType: string, content: any) => {
+  const renderResponse = (responseType: string, content: any, timelineItem: TimelineItem) => {
+    // Build cumulative state up to this timeline item
+    const cumulativeState = buildCumulativeState(timelineItem);
+    console.log(`renderResponse for ${responseType} with cumulative state:`, {
+      hasUser: !!cumulativeState.user,
+      hasCalendar: !!cumulativeState.calendar,
+      hasInvitees: !!cumulativeState.invitees,
+      hasInviteeCalendars: !!cumulativeState.invitee_calendars,
+      hasProposals: !!cumulativeState.pending_rescheduling_proposals
+    });
+
     switch (responseType) {
+      case "LoadUserResponse":
+        return renderUserUpdate(content);
       case "LoadCalendarResponse":
-        return renderCalendarUpdate(content);
+        return renderCalendarUpdate(content, cumulativeState);
       case "LoadInviteesResponse":
-        return renderInviteesUpdate(content);
+        return renderInviteesUpdate(content, cumulativeState);
       case "GetReschedulingProposalsResponse":
-        return renderReschedulingProposalsUpdate(content);
+        return renderReschedulingProposalsUpdate(content, cumulativeState);
       case "SendMessageResponse":
         return renderMessageResponse("Sent", content.sent_message);
       case "ReceiveMessageResponse":
@@ -769,6 +830,7 @@ export function App() {
   // Helper function to get human-readable description of state keys
   const getStateKeyDescription = (stateKey: StateKey): string => {
     switch (stateKey) {
+      case "$.load_user": return "Load User";
       case "$.introduction": return "Introduction";
       case "$.confirm_start": return "Confirm Start";
       case "$.load_calendar": return "Load Calendar";
@@ -783,8 +845,50 @@ export function App() {
     }
   };
 
+  // Render user update
+  const renderUserUpdate = (data: any) => {
+    const user = data.user || data;
+    if (!user) {
+      return (
+        <div className="p-3 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
+          Loading user...
+        </div>
+      );
+    }
+
+    // Helper function to convert 24-hour time to 12-hour AM/PM format
+    const formatHour = (hour: number): string => {
+      if (hour === 0) return "12 AM";
+      if (hour < 12) return `${hour} AM`;
+      if (hour === 12) return "12 PM";
+      return `${hour - 12} PM`;
+    };
+
+    return (
+      <div className="p-3 bg-white rounded-lg shadow-sm">
+        <div className="flex flex-col items-center space-y-3">
+          <img
+            src={user.avatar_url}
+            alt={`${user.given_name}'s avatar`}
+            className="w-12 h-12 rounded-full object-cover border-2 border-blue-500"
+            onError={(e) => {
+              e.currentTarget.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=";
+            }}
+          />
+          <div className="text-center">
+            <div className="font-medium text-gray-900 text-sm">{user.given_name}</div>
+            <div className="text-xs text-gray-600">Time zone: {user.timezone}</div>
+            <div className="text-xs text-gray-500">
+              Working hours: {formatHour(user.preffered_working_hours?.[0] || 9)} - {formatHour(user.preffered_working_hours?.[1] || 17)}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Render calendar update
-  const renderCalendarUpdate = (data: any) => {
+  const renderCalendarUpdate = (data: any, cumulativeState: AccumulatedState) => {
     const calendar = data.calendar || data;
     if (!calendar || !calendar.events) {
       return (
@@ -794,29 +898,38 @@ export function App() {
       );
     }
 
-    // For now, just show a simple calendar display
+    console.log("renderCalendarUpdate called with cumulative state:", {
+      calendarEvents: calendar?.events?.length || 0,
+      hasUser: !!cumulativeState.user,
+      hasInvitees: !!cumulativeState.invitees,
+      hasInviteeCalendars: !!cumulativeState.invitee_calendars,
+      hasProposals: !!cumulativeState.pending_rescheduling_proposals
+    });
+
+    // Use the cumulative state up to this timeline item
     return (
-      <div className="p-3 bg-white rounded-lg border shadow-sm">
-        <h4 className="font-medium text-gray-900 mb-2 text-sm">Calendar Loaded</h4>
-        <div className="text-xs text-gray-600">
-          {calendar.events?.length || 0} events found
-        </div>
-        {calendar.events?.map((event: any, index: number) => (
-          <div key={index} className="mt-2 p-2 bg-gray-50 rounded text-xs">
-            <div className="font-medium">{event.title}</div>
-            <div className="text-gray-600">
-              {new Date(event.start_time).toLocaleTimeString()} - {new Date(event.end_time).toLocaleTimeString()}
-            </div>
-          </div>
-        ))}
-      </div>
+      <CalendarDisplay
+        calendar={calendar}
+        currentUser={cumulativeState.user || {} as User}
+        invitees={cumulativeState.invitees}
+        inviteeCalendars={cumulativeState.invitee_calendars}
+        pendingReschedulingProposals={cumulativeState.pending_rescheduling_proposals}
+      />
     );
   };
 
   // Render invitees update
-  const renderInviteesUpdate = (data: any) => {
+  const renderInviteesUpdate = (data: any, cumulativeState: AccumulatedState) => {
     const invitees = data.invitees || [];
     const inviteeCalendars = data.invitee_calendars || {};
+    
+    console.log("renderInviteesUpdate called with cumulative state:", {
+      inviteesCount: invitees.length,
+      inviteeCalendarsCount: Object.keys(inviteeCalendars).length,
+      hasCalendar: !!cumulativeState.calendar,
+      hasUser: !!cumulativeState.user,
+      hasProposals: !!cumulativeState.pending_rescheduling_proposals
+    });
     
     if (invitees.length === 0) {
       return (
@@ -826,6 +939,21 @@ export function App() {
       );
     }
 
+    // Show the full calendar view with invitees when they're loaded
+    // Use the cumulative state up to this timeline item
+    if (cumulativeState.calendar) {
+      return (
+        <CalendarDisplay
+          calendar={cumulativeState.calendar}
+          currentUser={cumulativeState.user || {} as User}
+          invitees={invitees}
+          inviteeCalendars={inviteeCalendars}
+          pendingReschedulingProposals={cumulativeState.pending_rescheduling_proposals}
+        />
+      );
+    }
+
+    // Fallback to simple display if no calendar is loaded yet
     return (
       <div className="p-3 bg-white rounded-lg border shadow-sm">
         <h4 className="font-medium text-gray-900 mb-2 text-sm">Invitees Loaded</h4>
@@ -849,8 +977,16 @@ export function App() {
   };
 
   // Render rescheduling proposals update
-  const renderReschedulingProposalsUpdate = (data: any) => {
+  const renderReschedulingProposalsUpdate = (data: any, cumulativeState: AccumulatedState) => {
     const proposals = data.pending_rescheduling_proposals || [];
+    
+    console.log("renderReschedulingProposalsUpdate called with cumulative state:", {
+      proposalsCount: proposals.length,
+      hasCalendar: !!cumulativeState.calendar,
+      hasUser: !!cumulativeState.user,
+      hasInvitees: !!cumulativeState.invitees,
+      hasInviteeCalendars: !!cumulativeState.invitee_calendars
+    });
     
     if (proposals.length === 0) {
       return (
@@ -860,6 +996,58 @@ export function App() {
       );
     }
 
+    // Show the full calendar view with rescheduling proposals
+    // Use the cumulative state up to this timeline item
+    if (cumulativeState.calendar) {
+      return (
+        <>
+          <CalendarDisplay
+            calendar={cumulativeState.calendar}
+            currentUser={cumulativeState.user || {} as User}
+            invitees={cumulativeState.invitees}
+            inviteeCalendars={cumulativeState.invitee_calendars}
+            pendingReschedulingProposals={proposals}
+          />
+          
+          {/* Pending Rescheduling Proposals Details */}
+          <div className="mt-4 space-y-2 text-sm text-gray-700">
+            {proposals.map((proposal: PendingRescheduledEvent, index: number) => (
+              <div key={index} className="p-3 bg-white rounded-lg border shadow-sm">
+                <p className="text-sm">
+                  <strong>Event:</strong>{" "}
+                  <strong>{proposal.original_event?.title || "Unknown Event"}</strong>
+                </p>
+                <p className="text-sm">
+                  <strong>Start Time Change:</strong>{" "}
+                  <span className="text-red-600 font-medium">
+                    {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                  </span>
+                  {" → "}
+                  <span className="text-green-600 font-medium">
+                    {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                  </span>
+                </p>
+                <p className="text-sm">
+                  <strong>End Time Change:</strong>{" "}
+                  <span className="text-red-600 font-medium">
+                    {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                  </span>
+                  {" → "}
+                  <span className="text-green-600 font-medium">
+                    {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
+                  </span>
+                </p>
+                <p className="text-sm">
+                  <strong>Reason:</strong> <ReactMarkdown>{proposal.explanation}</ReactMarkdown>
+                </p>
+              </div>
+            ))}
+          </div>
+        </>
+      );
+    }
+
+    // Fallback to simple display if no calendar is loaded yet
     return (
       <div className="p-3 bg-white rounded-lg border shadow-sm">
         <h4 className="font-medium text-gray-900 mb-2 text-sm">Rescheduling Proposals</h4>
@@ -868,7 +1056,7 @@ export function App() {
             <div key={index} className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
               <p><strong>Event:</strong> {proposal.original_event?.title}</p>
               <p><strong>New Time:</strong> {new Date(proposal.new_start_time).toLocaleTimeString()} - {new Date(proposal.new_end_time).toLocaleTimeString()}</p>
-              <p><strong>Reason:</strong> {proposal.explanation}</p>
+              <p><strong>Reason:</strong> <ReactMarkdown>{proposal.explanation}</ReactMarkdown></p>
             </div>
           ))}
         </div>
@@ -878,9 +1066,15 @@ export function App() {
 
   // Render message response
   const renderMessageResponse = (type: string, message: any) => {
+    // Process escaped newlines for markdown
+    const processedContent = message.content.replace(/\\n/g, "\n");
+    
     return (
       <div className="p-3 bg-blue-50 rounded-lg text-sm">
-        <strong>{type} Message:</strong> {message.content}
+        <strong>{type} Message:</strong>
+        <div className="mt-1">
+          <ReactMarkdown>{processedContent}</ReactMarkdown>
+        </div>
         <div className="text-xs text-gray-600 mt-1">
           From: {message.from_user?.given_name} → To: {message.to_user?.given_name}
         </div>
@@ -888,21 +1082,168 @@ export function App() {
     );
   };
 
-  // Render state-specific content using accumulated state
-  const renderStateContent = (state: any) => {
-    // This function is now deprecated in favor of renderStateUpdate and renderResponse
-    // But we'll keep it for backward compatibility
-    console.log("renderStateContent called with state type:", state.type);
-    console.log("State data:", state);
+  // Function to build cumulative state up to a specific timeline item
+  const buildCumulativeState = (timelineItem: TimelineItem): AccumulatedState => {
+    const state: AccumulatedState = {};
     
-    // Helper function to render time-based calendar section
-    const renderTimeBasedCalendar = (
-      calendar: any,
-      currentUser: User,
-      invitees?: User[],
-      inviteeCalendars?: Record<string, Calendar>,
-      pendingReschedulingProposals?: any[]
-    ) => {
+    // Find all timeline items up to and including the current one
+    const currentIndex = timeline.findIndex(item => item.id === timelineItem.id);
+    const relevantItems = timeline.slice(0, currentIndex + 1);
+    
+    console.log(`buildCumulativeState for timeline item ${timelineItem.id} (${timelineItem.type}):`, {
+      currentIndex,
+      relevantItemsCount: relevantItems.length,
+      relevantItemTypes: relevantItems.map(item => `${item.type}${item.stateKey ? `(${item.stateKey})` : ''}${item.responseType ? `(${item.responseType})` : ''}`)
+    });
+    
+    // Process each timeline item to build cumulative state
+    for (const item of relevantItems) {
+      if (item.type === "state_update" && item.stateKey) {
+        console.log(`Processing state_update: ${item.stateKey}`, {
+          hasContent: !!item.content,
+          contentKeys: item.content ? Object.keys(item.content) : []
+        });
+        
+        switch (item.stateKey) {
+          case "$.load_user":
+            if (item.content?.user) {
+              state.user = item.content.user;
+              console.log("Added user to cumulative state");
+            }
+            break;
+          case "$.load_calendar":
+            if (item.content?.calendar) {
+              state.calendar = item.content.calendar;
+              console.log("Added calendar to cumulative state");
+            }
+            break;
+          case "$.load_invitees":
+            if (item.content?.invitees) {
+              state.invitees = item.content.invitees;
+              console.log("Added invitees to cumulative state");
+            }
+            if (item.content?.invitee_calendars) {
+              state.invitee_calendars = item.content.invitee_calendars;
+              console.log("Added invitee_calendars to cumulative state");
+            }
+            break;
+          case "$.get_rescheduling_proposals":
+            if (item.content?.pending_rescheduling_proposals) {
+              state.pending_rescheduling_proposals = item.content.pending_rescheduling_proposals;
+              console.log("Added pending_rescheduling_proposals to cumulative state");
+            }
+            break;
+        }
+      } else if (item.type === "response") {
+        console.log(`Processing response: ${item.responseType}`, {
+          hasContent: !!item.content,
+          contentKeys: item.content ? Object.keys(item.content) : []
+        });
+        
+        // Handle response objects that also contain state data
+        switch (item.responseType) {
+          case "LoadUserResponse":
+            if (item.content?.user) {
+              state.user = item.content.user;
+              console.log("Added user to cumulative state from response");
+            }
+            break;
+          case "LoadCalendarResponse":
+            if (item.content?.calendar) {
+              state.calendar = item.content.calendar;
+              console.log("Added calendar to cumulative state from response");
+            }
+            break;
+          case "LoadInviteesResponse":
+            if (item.content?.invitees) {
+              state.invitees = item.content.invitees;
+              console.log("Added invitees to cumulative state from response");
+            }
+            if (item.content?.invitee_calendars) {
+              state.invitee_calendars = item.content.invitee_calendars;
+              console.log("Added invitee_calendars to cumulative state from response");
+            }
+            break;
+          case "GetReschedulingProposalsResponse":
+            if (item.content?.pending_rescheduling_proposals) {
+              state.pending_rescheduling_proposals = item.content.pending_rescheduling_proposals;
+              console.log("Added pending_rescheduling_proposals to cumulative state from response");
+            }
+            break;
+        }
+      }
+    }
+    
+    console.log("Final cumulative state:", {
+      hasUser: !!state.user,
+      hasCalendar: !!state.calendar,
+      hasInvitees: !!state.invitees,
+      hasInviteeCalendars: !!state.invitee_calendars,
+      hasProposals: !!state.pending_rescheduling_proposals
+    });
+    
+    return state;
+  };
+
+  // CalendarDisplay component that captures state at render time
+  const CalendarDisplay = ({
+    calendar,
+    currentUser,
+    invitees,
+    inviteeCalendars,
+    pendingReschedulingProposals
+  }: {
+    calendar: any;
+    currentUser: User;
+    invitees?: User[];
+    inviteeCalendars?: Record<string, Calendar>;
+    pendingReschedulingProposals?: any[];
+  }) => {
+    // Use useRef to capture state only once, on first render
+    const capturedStateRef = useRef<{
+      calendar: any;
+      currentUser: User;
+      invitees?: User[];
+      inviteeCalendars?: Record<string, Calendar>;
+      pendingReschedulingProposals?: any[];
+    } | null>(null);
+
+    // Only capture state if it hasn't been captured yet
+    if (!capturedStateRef.current) {
+      console.log("CalendarDisplay capturing state at render time:", {
+        calendarEvents: calendar?.events?.length || 0,
+        inviteesCount: invitees?.length || 0,
+        proposalsCount: pendingReschedulingProposals?.length || 0,
+        calendarId: calendar?.id,
+        currentUserName: currentUser?.given_name
+      });
+      
+      capturedStateRef.current = {
+        calendar,
+        currentUser,
+        invitees,
+        inviteeCalendars,
+        pendingReschedulingProposals
+      };
+    }
+
+    return renderTimeBasedCalendar(
+      capturedStateRef.current.calendar,
+      capturedStateRef.current.currentUser,
+      capturedStateRef.current.invitees,
+      capturedStateRef.current.inviteeCalendars,
+      capturedStateRef.current.pendingReschedulingProposals
+    );
+  };
+
+  // Helper function to render time-based calendar section
+  const renderTimeBasedCalendar = (
+    calendar: any,
+    currentUser: User,
+    invitees?: User[],
+    inviteeCalendars?: Record<string, Calendar>,
+    pendingReschedulingProposals?: any[]
+  ) => {
       console.log("renderTimeBasedCalendar called with:");
       console.log("- calendar:", calendar);
       console.log("- currentUser:", currentUser);
@@ -931,8 +1272,8 @@ export function App() {
       ].flat();
 
       // Find time range for the day based on user's preferred working hours
-      const startHour = currentUser.preffered_working_hours?.[0] || 6; // Default to 6 AM if not specified
-      const endHour = currentUser.preffered_working_hours?.[1] || 22; // Default to 10 PM if not specified
+      const startHour = currentUser.preffered_working_hours?.[0] || 9; // Default to 9 AM if not specified
+      const endHour = currentUser.preffered_working_hours?.[1] || 17; // Default to 5 PM if not specified
       const hourRange = endHour - startHour;
 
       // Create time slots
@@ -1274,9 +1615,16 @@ export function App() {
       );
     };
 
+  // Render state-specific content using accumulated state
+  const renderStateContent = (state: any) => {
+    // This function is now deprecated in favor of renderStateUpdate and renderResponse
+    // But we'll keep it for backward compatibility
+    console.log("renderStateContent called with state type:", state.type);
+    console.log("State data:", state);
+    
     // This function is now deprecated - the new stream format uses incremental updates
     // Return a message indicating this is legacy code
-      return (
+    return (
       <div className="p-3 bg-yellow-50 rounded-lg text-sm">
         <strong>Legacy State Display:</strong> This state type is no longer used in the new stream format.
         <pre className="text-xs mt-2 overflow-x-auto">
