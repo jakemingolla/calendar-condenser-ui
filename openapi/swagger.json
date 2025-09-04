@@ -81,14 +81,96 @@
                     {
                       "$ref": "#/components/schemas/StreamlinedAIMessageChunk"
                     },
-                    { "$ref": "#/components/schemas/InitialState" },
-                    { "$ref": "#/components/schemas/StateWithCalendar" },
-                    { "$ref": "#/components/schemas/StateWithInvitees" },
                     {
-                      "$ref": "#/components/schemas/StateWithPendingReschedulingProposals"
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": { "const": "$.introduction" }
                     },
                     {
-                      "$ref": "#/components/schemas/StateWithCompletedReschedulingProposals"
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": { "const": "$.confirm_start" }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/LoadCalendarResponse"
+                      },
+                      "propertyNames": { "const": "$.load_calendar" }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": { "const": "$.summarize_calendar" }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/LoadInviteesResponse"
+                      },
+                      "propertyNames": { "const": "$.load_invitees" }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": {
+                        "const": "$.before_rescheduling_proposals"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/GetReschedulingProposalsResponse"
+                      },
+                      "propertyNames": {
+                        "const": "$.get_rescheduling_proposals"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": {
+                        "const": "$.confirm_rescheduling_proposals"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": {
+                        "const": "$.invoke_send_rescheduling_proposal_to_invitee"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
+                      "propertyNames": { "const": "$.final_summarization" }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/SendMessageResponse"
+                      },
+                      "propertyNames": {
+                        "const": "$.invoke_send_rescheduling_proposal_to_invitee:[uuid].send_message"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/ReceiveMessageResponse"
+                      },
+                      "propertyNames": {
+                        "const": "$.invoke_send_rescheduling_proposal_to_invitee:[uuid].receive_message"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/AnalyzeMessageResponse"
+                      },
+                      "propertyNames": {
+                        "const": "$.invoke_send_rescheduling_proposal_to_invitee:[uuid].analyze_message"
+                      }
                     },
                     { "$ref": "#/components/schemas/Interrupt" }
                   ],
@@ -131,45 +213,24 @@
   },
   "components": {
     "schemas": {
-      "AcceptedRescheduledEvent": {
-        "properties": {
-          "type": { "type": "string", "title": "Type", "default": "" },
-          "original_event": {
-            "$ref": "#/components/schemas/CalendarEvent",
-            "description": "The event pending rescheduling."
-          },
-          "new_start_time": {
-            "type": "string",
-            "format": "date-time",
-            "title": "New Start Time",
-            "description": "The new start time for the event."
-          },
-          "new_end_time": {
-            "type": "string",
-            "format": "date-time",
-            "title": "New End Time",
-            "description": "The new end time for the event."
-          },
-          "explanation": {
-            "type": "string",
-            "title": "Explanation",
-            "description": "A detailed explanation of the rescheduling proposal."
-          }
-        },
-        "type": "object",
-        "required": [
-          "original_event",
-          "new_start_time",
-          "new_end_time",
-          "explanation"
-        ],
-        "title": "AcceptedRescheduledEvent"
-      },
       "AdditionalKwargs": {
         "properties": { "source": { "type": "string", "title": "Source" } },
         "type": "object",
         "required": ["source"],
-        "title": "AdditionalKwargs"
+        "title": "AdditionalKwargs",
+        "description": "Specific additional kwargs added to the message chunk.\n\n@see src/callbacks/add_source_to_messages.py"
+      },
+      "AnalyzeMessageResponse": {
+        "properties": {
+          "message_analysis": {
+            "type": "string",
+            "enum": ["positive", "negative", "unknown"],
+            "title": "Message Analysis"
+          }
+        },
+        "type": "object",
+        "required": ["message_analysis"],
+        "title": "AnalyzeMessageResponse"
       },
       "Calendar": {
         "properties": {
@@ -274,6 +335,19 @@
         "required": ["id"],
         "title": "CalendarEventInvitee"
       },
+      "GetReschedulingProposalsResponse": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "pending_rescheduling_proposals": {
+            "items": { "$ref": "#/components/schemas/PendingRescheduledEvent" },
+            "type": "array",
+            "title": "Pending Rescheduling Proposals"
+          }
+        },
+        "type": "object",
+        "required": ["pending_rescheduling_proposals"],
+        "title": "GetReschedulingProposalsResponse"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -285,16 +359,21 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
-      "InitialState": {
+      "IncomingMessage": {
         "properties": {
-          "date": { "type": "string", "format": "date-time", "title": "Date" },
-          "type": { "type": "string", "title": "Type", "default": "" },
-          "user": { "$ref": "#/components/schemas/User" }
+          "content": { "type": "string", "title": "Content" },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At"
+          },
+          "from_user": { "$ref": "#/components/schemas/User" },
+          "to_user": { "$ref": "#/components/schemas/User" }
         },
-        "additionalProperties": false,
         "type": "object",
-        "required": ["date", "user"],
-        "title": "InitialState"
+        "required": ["content", "sent_at", "from_user", "to_user"],
+        "title": "IncomingMessage",
+        "description": "A message received from another user."
       },
       "Interrupt": {
         "properties": {
@@ -317,7 +396,52 @@
         },
         "type": "object",
         "required": ["value", "id"],
-        "title": "Interrupt"
+        "title": "Interrupt",
+        "description": "Indicates to the UI the graph is waiting for user input."
+      },
+      "LoadCalendarResponse": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "calendar": { "$ref": "#/components/schemas/Calendar" }
+        },
+        "type": "object",
+        "required": ["calendar"],
+        "title": "LoadCalendarResponse"
+      },
+      "LoadInviteesResponse": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "invitees": {
+            "items": { "$ref": "#/components/schemas/User" },
+            "type": "array",
+            "title": "Invitees"
+          },
+          "invitee_calendars": {
+            "additionalProperties": { "$ref": "#/components/schemas/Calendar" },
+            "propertyNames": { "format": "uuid" },
+            "type": "object",
+            "title": "Invitee Calendars"
+          }
+        },
+        "type": "object",
+        "required": ["invitees", "invitee_calendars"],
+        "title": "LoadInviteesResponse"
+      },
+      "OutgoingMessage": {
+        "properties": {
+          "content": { "type": "string", "title": "Content" },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Sent At"
+          },
+          "from_user": { "$ref": "#/components/schemas/User" },
+          "to_user": { "$ref": "#/components/schemas/User" }
+        },
+        "type": "object",
+        "required": ["content", "sent_at", "from_user", "to_user"],
+        "title": "OutgoingMessage",
+        "description": "A message sent by the user."
       },
       "PendingRescheduledEvent": {
         "properties": {
@@ -353,39 +477,14 @@
         ],
         "title": "PendingRescheduledEvent"
       },
-      "RejectedRescheduledEvent": {
+      "ReceiveMessageResponse": {
         "properties": {
           "type": { "type": "string", "title": "Type", "default": "" },
-          "original_event": {
-            "$ref": "#/components/schemas/CalendarEvent",
-            "description": "The event pending rescheduling."
-          },
-          "new_start_time": {
-            "type": "string",
-            "format": "date-time",
-            "title": "New Start Time",
-            "description": "The new start time for the event."
-          },
-          "new_end_time": {
-            "type": "string",
-            "format": "date-time",
-            "title": "New End Time",
-            "description": "The new end time for the event."
-          },
-          "explanation": {
-            "type": "string",
-            "title": "Explanation",
-            "description": "A detailed explanation of the rescheduling proposal."
-          }
+          "received_message": { "$ref": "#/components/schemas/IncomingMessage" }
         },
         "type": "object",
-        "required": [
-          "original_event",
-          "new_start_time",
-          "new_end_time",
-          "explanation"
-        ],
-        "title": "RejectedRescheduledEvent"
+        "required": ["received_message"],
+        "title": "ReceiveMessageResponse"
       },
       "ResponseMetadata": {
         "properties": {
@@ -419,121 +518,17 @@
         },
         "type": "object",
         "required": ["value", "id"],
-        "title": "Resume"
+        "title": "Resume",
+        "description": "Sent by the UI to resume the graph execution."
       },
-      "StateWithCalendar": {
+      "SendMessageResponse": {
         "properties": {
-          "date": { "type": "string", "format": "date-time", "title": "Date" },
           "type": { "type": "string", "title": "Type", "default": "" },
-          "user": { "$ref": "#/components/schemas/User" },
-          "calendar": { "$ref": "#/components/schemas/Calendar" }
+          "sent_message": { "$ref": "#/components/schemas/OutgoingMessage" }
         },
-        "additionalProperties": false,
         "type": "object",
-        "required": ["date", "user", "calendar"],
-        "title": "StateWithCalendar"
-      },
-      "StateWithCompletedReschedulingProposals": {
-        "properties": {
-          "date": { "type": "string", "format": "date-time", "title": "Date" },
-          "type": { "type": "string", "title": "Type", "default": "" },
-          "user": { "$ref": "#/components/schemas/User" },
-          "calendar": { "$ref": "#/components/schemas/Calendar" },
-          "invitees": {
-            "items": { "$ref": "#/components/schemas/User" },
-            "type": "array",
-            "title": "Invitees"
-          },
-          "invitee_calendars": {
-            "additionalProperties": { "$ref": "#/components/schemas/Calendar" },
-            "propertyNames": { "format": "uuid" },
-            "type": "object",
-            "title": "Invitee Calendars"
-          },
-          "pending_rescheduling_proposals": {
-            "items": { "$ref": "#/components/schemas/PendingRescheduledEvent" },
-            "type": "array",
-            "title": "Pending Rescheduling Proposals"
-          },
-          "completed_rescheduling_proposals": {
-            "items": {
-              "anyOf": [
-                { "$ref": "#/components/schemas/AcceptedRescheduledEvent" },
-                { "$ref": "#/components/schemas/RejectedRescheduledEvent" }
-              ]
-            },
-            "type": "array",
-            "title": "Completed Rescheduling Proposals"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "date",
-          "user",
-          "calendar",
-          "invitees",
-          "pending_rescheduling_proposals",
-          "completed_rescheduling_proposals"
-        ],
-        "title": "StateWithCompletedReschedulingProposals"
-      },
-      "StateWithInvitees": {
-        "properties": {
-          "date": { "type": "string", "format": "date-time", "title": "Date" },
-          "type": { "type": "string", "title": "Type", "default": "" },
-          "user": { "$ref": "#/components/schemas/User" },
-          "calendar": { "$ref": "#/components/schemas/Calendar" },
-          "invitees": {
-            "items": { "$ref": "#/components/schemas/User" },
-            "type": "array",
-            "title": "Invitees"
-          },
-          "invitee_calendars": {
-            "additionalProperties": { "$ref": "#/components/schemas/Calendar" },
-            "propertyNames": { "format": "uuid" },
-            "type": "object",
-            "title": "Invitee Calendars"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": ["date", "user", "calendar", "invitees"],
-        "title": "StateWithInvitees"
-      },
-      "StateWithPendingReschedulingProposals": {
-        "properties": {
-          "date": { "type": "string", "format": "date-time", "title": "Date" },
-          "type": { "type": "string", "title": "Type", "default": "" },
-          "user": { "$ref": "#/components/schemas/User" },
-          "calendar": { "$ref": "#/components/schemas/Calendar" },
-          "invitees": {
-            "items": { "$ref": "#/components/schemas/User" },
-            "type": "array",
-            "title": "Invitees"
-          },
-          "invitee_calendars": {
-            "additionalProperties": { "$ref": "#/components/schemas/Calendar" },
-            "propertyNames": { "format": "uuid" },
-            "type": "object",
-            "title": "Invitee Calendars"
-          },
-          "pending_rescheduling_proposals": {
-            "items": { "$ref": "#/components/schemas/PendingRescheduledEvent" },
-            "type": "array",
-            "title": "Pending Rescheduling Proposals"
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "date",
-          "user",
-          "calendar",
-          "invitees",
-          "pending_rescheduling_proposals"
-        ],
-        "title": "StateWithPendingReschedulingProposals"
+        "required": ["sent_message"],
+        "title": "SendMessageResponse"
       },
       "StreamlinedAIMessageChunk": {
         "properties": {

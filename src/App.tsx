@@ -29,41 +29,82 @@ interface Calendar {
   events?: CalendarEvent[];
 }
 
-interface StateWithCalendar {
+// New response interfaces based on the updated OpenAPI schema
+interface LoadCalendarResponse {
   type: string;
-  date: string;
-  user: User;
   calendar: Calendar;
 }
 
-interface StateWithInvitees {
+interface LoadInviteesResponse {
   type: string;
-  date: string;
-  user: User;
-  calendar: Calendar;
   invitees: User[];
   invitee_calendars: Record<string, Calendar>;
 }
 
-interface StateWithPendingReschedulingProposals {
+interface GetReschedulingProposalsResponse {
   type: string;
-  date: string;
-  user: User;
-  calendar: Calendar;
-  invitees: User[];
-  invitee_calendars: Record<string, Calendar>;
-  pending_rescheduling_proposals: any[];
+  pending_rescheduling_proposals: PendingRescheduledEvent[];
 }
 
-interface StateWithCompletedReschedulingProposals {
+interface PendingRescheduledEvent {
   type: string;
-  date: string;
-  user: User;
-  calendar: Calendar;
-  invitees: User[];
-  invitee_calendars: Record<string, Calendar>;
-  pending_rescheduling_proposals: any[];
-  completed_rescheduling_proposals: any[];
+  original_event: CalendarEvent;
+  new_start_time: string;
+  new_end_time: string;
+  explanation: string;
+}
+
+interface SendMessageResponse {
+  type: string;
+  sent_message: OutgoingMessage;
+}
+
+interface ReceiveMessageResponse {
+  type: string;
+  received_message: IncomingMessage;
+}
+
+interface AnalyzeMessageResponse {
+  message_analysis: "positive" | "negative" | "unknown";
+}
+
+interface OutgoingMessage {
+  content: string;
+  sent_at: string;
+  from_user: User;
+  to_user: User;
+}
+
+interface IncomingMessage {
+  content: string;
+  sent_at: string;
+  from_user: User;
+  to_user: User;
+}
+
+// State key types for the new stream format
+type StateKey = 
+  | "$.introduction"
+  | "$.confirm_start"
+  | "$.load_calendar"
+  | "$.summarize_calendar"
+  | "$.load_invitees"
+  | "$.before_rescheduling_proposals"
+  | "$.get_rescheduling_proposals"
+  | "$.confirm_rescheduling_proposals"
+  | "$.invoke_send_rescheduling_proposal_to_invitee"
+  | "$.final_summarization";
+
+// Accumulated state interface
+interface AccumulatedState {
+  user?: User;
+  date?: string;
+  calendar?: Calendar;
+  invitees?: User[];
+  invitee_calendars?: Record<string, Calendar>;
+  pending_rescheduling_proposals?: PendingRescheduledEvent[];
+  completed_rescheduling_proposals?: any[];
+  conversations?: Record<string, (OutgoingMessage | IncomingMessage)[]>;
 }
 
 // New interfaces for interrupt handling
@@ -83,10 +124,11 @@ interface Resume {
 interface TimelineItem {
   id: string;
   timestamp: number;
-  type: "ai_message" | "state_change" | "interrupt";
+  type: "ai_message" | "state_update" | "interrupt" | "response";
   content: any;
-  stateType?: string; // For state changes, track the type
+  stateKey?: StateKey; // For state updates, track the state key
   messageId?: string; // For AI messages, track the message ID to group chunks
+  responseType?: string; // For responses, track the response type
 }
 
 // Function to generate a random UUID
@@ -101,14 +143,12 @@ function generateUUID(): string {
 export function App() {
   const [isStarted, setIsStarted] = useState(false);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
-  const [currentState, setCurrentState] = useState<Record<string, any> | null>(
-    null
-  );
+  const [accumulatedState, setAccumulatedState] = useState<AccumulatedState>({});
   const [inviteeUsers, setInviteeUsers] = useState<Record<string, User>>({});
   const [loadingInvitees, setLoadingInvitees] = useState<
     Record<string, boolean>
   >({});
-  const [seenStateTypes, setSeenStateTypes] = useState<Set<string>>(new Set());
+  const [seenStateKeys, setSeenStateKeys] = useState<Set<StateKey>>(new Set());
   const [waitingForNextState, setWaitingForNextState] = useState(false);
   const [currentInterrupt, setCurrentInterrupt] = useState<Interrupt | null>(null);
   const [isResuming, setIsResuming] = useState(false);
@@ -176,6 +216,95 @@ export function App() {
     // TODO: Implement API call to reject the proposal
     // For now, just log the action
     alert(`Rejected rescheduling for: ${proposal.original_event?.title}`);
+  };
+
+  // Helper function to update accumulated state based on state key
+  const updateAccumulatedState = (stateKey: StateKey, data: any) => {
+    setAccumulatedState(prev => {
+      const newState = { ...prev };
+      
+      switch (stateKey) {
+        case "$.load_calendar":
+          if (data && data.calendar) {
+            newState.calendar = data.calendar;
+            // Extract user and date from calendar if available
+            if (data.calendar.owner) {
+              newState.user = { ...newState.user, id: data.calendar.owner } as User;
+            }
+          }
+          break;
+        case "$.load_invitees":
+          if (data && data.invitees) {
+            newState.invitees = data.invitees;
+            newState.invitee_calendars = data.invitee_calendars || {};
+          }
+          break;
+        case "$.get_rescheduling_proposals":
+          if (data && data.pending_rescheduling_proposals) {
+            newState.pending_rescheduling_proposals = data.pending_rescheduling_proposals;
+          }
+          break;
+        // Add other state keys as needed
+        default:
+          console.log(`Unhandled state key: ${stateKey}`);
+      }
+      
+      return newState;
+    });
+  };
+
+  // Helper function to update accumulated state from response objects
+  const updateAccumulatedStateFromResponse = (data: any) => {
+    setAccumulatedState(prev => {
+      const newState = { ...prev };
+      
+      switch (data.type) {
+        case "LoadCalendarResponse":
+          if (data.calendar) {
+            newState.calendar = data.calendar;
+          }
+          break;
+        case "LoadInviteesResponse":
+          if (data.invitees) {
+            newState.invitees = data.invitees;
+            newState.invitee_calendars = data.invitee_calendars || {};
+          }
+          break;
+        case "GetReschedulingProposalsResponse":
+          if (data.pending_rescheduling_proposals) {
+            newState.pending_rescheduling_proposals = data.pending_rescheduling_proposals;
+          }
+          break;
+        case "SendMessageResponse":
+          if (data.sent_message) {
+            const conversationKey = data.sent_message.to_user.id;
+            if (!newState.conversations) {
+              newState.conversations = {};
+            }
+            if (!newState.conversations[conversationKey]) {
+              newState.conversations[conversationKey] = [];
+            }
+            newState.conversations[conversationKey].push(data.sent_message);
+          }
+          break;
+        case "ReceiveMessageResponse":
+          if (data.received_message) {
+            const conversationKey = data.received_message.from_user.id;
+            if (!newState.conversations) {
+              newState.conversations = {};
+            }
+            if (!newState.conversations[conversationKey]) {
+              newState.conversations[conversationKey] = [];
+            }
+            newState.conversations[conversationKey].push(data.received_message);
+          }
+          break;
+        default:
+          console.log(`Unhandled response type: ${data.type}`);
+      }
+      
+      return newState;
+    });
   };
 
   // Function to handle resuming from an interrupt
@@ -281,37 +410,53 @@ export function App() {
                   content: data,
                 },
               ]);
-            } else if (data.type && data.type !== "AIMessageChunk") {
-              // Generate a unique ID for this state based on its content
-              const stateId = generateStateId(data);
+            } else {
+              // Handle state updates and responses
+              const stateKey = Object.keys(data).find(key => key.startsWith('$.')) as StateKey;
+              
+              if (stateKey) {
+                // This is a state update
+                console.log(`Processing resumed state update: ${stateKey}`);
+                
+                if (!seenStateKeys.has(stateKey)) {
+                  setSeenStateKeys(prev => new Set([...prev, stateKey]));
+                  setWaitingForNextState(false);
 
-              console.log(
-                `Processing resumed state: ${data.type}, Generated ID: ${stateId}`
-              );
+                  // Only add to timeline if there's actual content (not null)
+                  if (data[stateKey] !== null) {
+                    setTimeline((prev) => [
+                      ...prev,
+                      {
+                        id: `state_${stateKey}_${Date.now()}`,
+                        timestamp: Date.now(),
+                        type: "state_update" as const,
+                        content: data[stateKey],
+                        stateKey: stateKey,
+                      },
+                    ]);
+                  }
 
-              // Check if this exact state has been seen before
-              if (!seenStateIdsRef.current.has(stateId)) {
-                // First time seeing this state - add to timeline, mark as seen, and reset waiting flag
-                console.log(`Adding new resumed state to timeline: ${data.type}`);
-                seenStateIdsRef.current.add(stateId);
-                setWaitingForNextState(false);
-
+                  // Update accumulated state
+                  updateAccumulatedState(stateKey, data[stateKey]);
+                }
+              } else if (data.type) {
+                // This is a response object
+                console.log(`Processing resumed response: ${data.type}`);
+                
                 setTimeline((prev) => [
                   ...prev,
                   {
-                    id: `state_${data.type}_${Date.now()}`,
+                    id: `response_${data.type}_${Date.now()}`,
                     timestamp: Date.now(),
-                    type: "state_change" as const,
+                    type: "response" as const,
                     content: data,
-                    stateType: data.type,
+                    responseType: data.type,
                   },
                 ]);
-              } else {
-                console.log(`Skipping duplicate resumed state: ${data.type}`);
-              }
 
-              // Always update current state for rendering
-              setCurrentState(data);
+                // Update accumulated state based on response type
+                updateAccumulatedStateFromResponse(data);
+              }
             }
           } catch (e) {
             console.error("Failed to parse JSON:", line);
@@ -330,7 +475,8 @@ export function App() {
   const handleStart = async () => {
     setIsStarted(true);
     setTimeline([]);
-    setSeenStateTypes(new Set());
+    setAccumulatedState({});
+    setSeenStateKeys(new Set());
     setWaitingForNextState(false);
     setCurrentInterrupt(null);
     setIsResuming(false);
@@ -421,41 +567,53 @@ export function App() {
                   content: data,
                 },
               ]);
-            } else if (data.type && data.type !== "AIMessageChunk") {
-              // Generate a unique ID for this state based on its content
-              const stateId = generateStateId(data);
+            } else {
+              // Handle state updates and responses
+              const stateKey = Object.keys(data).find(key => key.startsWith('$.')) as StateKey;
+              
+              if (stateKey) {
+                // This is a state update
+                console.log(`Processing state update: ${stateKey}`);
+                
+                if (!seenStateKeys.has(stateKey)) {
+                  setSeenStateKeys(prev => new Set([...prev, stateKey]));
+                  setWaitingForNextState(false);
 
-              console.log(
-                `Processing state: ${data.type}, Generated ID: ${stateId}`
-              );
-              console.log(
-                `Already seen: ${seenStateIdsRef.current.has(stateId)}`
-              );
+                  // Only add to timeline if there's actual content (not null)
+                  if (data[stateKey] !== null) {
+                    setTimeline((prev) => [
+                      ...prev,
+                      {
+                        id: `state_${stateKey}_${Date.now()}`,
+                        timestamp: Date.now(),
+                        type: "state_update" as const,
+                        content: data[stateKey],
+                        stateKey: stateKey,
+                      },
+                    ]);
+                  }
 
-              // Check if this exact state has been seen before
-              if (!seenStateIdsRef.current.has(stateId)) {
-                // First time seeing this state - add to timeline, mark as seen, and reset waiting flag
-                console.log(`Adding new state to timeline: ${data.type}`);
-                seenStateIdsRef.current.add(stateId);
-                setWaitingForNextState(false);
-
+                  // Update accumulated state
+                  updateAccumulatedState(stateKey, data[stateKey]);
+                }
+              } else if (data.type) {
+                // This is a response object
+                console.log(`Processing response: ${data.type}`);
+                
                 setTimeline((prev) => [
                   ...prev,
                   {
-                    id: `state_${data.type}_${Date.now()}`,
+                    id: `response_${data.type}_${Date.now()}`,
                     timestamp: Date.now(),
-                    type: "state_change" as const,
+                    type: "response" as const,
                     content: data,
-                    stateType: data.type,
+                    responseType: data.type,
                   },
                 ]);
-              } else {
-                console.log(`Skipping duplicate state: ${data.type}`);
-                // Don't reset waitingForNextState for duplicate states
-              }
 
-              // Always update current state for rendering
-              setCurrentState(data);
+                // Update accumulated state based on response type
+                updateAccumulatedStateFromResponse(data);
+              }
             }
           } catch (e) {
             console.error("Failed to parse JSON:", line);
@@ -468,58 +626,6 @@ export function App() {
     }
   };
 
-  // Generate a unique ID for a state based on its content
-  const generateStateId = (state: any): string => {
-    if (state.type === "InitialState") {
-      return `initial_${state.user?.id}_${state.date}`;
-    }
-
-    if (state.type === "StateWithCalendar") {
-      const events = state.calendar?.events || [];
-      const eventIds = events
-        .map((e: any) => e.id)
-        .sort()
-        .join(",");
-      return `calendar_${state.user?.id}_${state.date}_${eventIds}`;
-    }
-
-    if (state.type === "StateWithInvitees") {
-      const events = state.calendar?.events || [];
-      const eventIds = events
-        .map((e: any) => e.id)
-        .sort()
-        .join(",");
-      const inviteeIds = (state.invitees || [])
-        .map((i: any) => i.id)
-        .sort()
-        .join(",");
-      return `invitees_${state.user?.id}_${state.date}_${eventIds}_${inviteeIds}`;
-    }
-
-    if (state.type === "StateWithPendingReschedulingProposals") {
-      const events = state.calendar?.events || [];
-      const eventIds = events
-        .map((e: any) => e.id)
-        .sort()
-        .join(",");
-      const proposalCount = (state.pending_rescheduling_proposals || []).length;
-      return `pending_${state.user?.id}_${state.date}_${eventIds}_${proposalCount}`;
-    }
-
-    if (state.type === "StateWithCompletedReschedulingProposals") {
-      const events = state.calendar?.events || [];
-      const eventIds = events
-        .map((e: any) => e.id)
-        .sort()
-        .join(",");
-      const proposalCount = (state.completed_rescheduling_proposals || [])
-        .length;
-      return `completed_${state.user?.id}_${state.date}_${eventIds}_${proposalCount}`;
-    }
-
-    // Fallback for unknown state types
-    return `${state.type}_${JSON.stringify(state).slice(0, 100)}`;
-  };
 
   // Render timeline items
   const renderTimelineItem = (item: TimelineItem) => {
@@ -584,10 +690,18 @@ export function App() {
       );
     }
 
-    if (item.type === "state_change") {
+    if (item.type === "state_update") {
       return (
         <div key={item.id} className="w-full mb-3">
-          {renderStateContent(item.content)}
+          {renderStateUpdate(item.stateKey!, item.content)}
+        </div>
+      );
+    }
+
+    if (item.type === "response") {
+      return (
+        <div key={item.id} className="w-full mb-3">
+          {renderResponse(item.responseType!, item.content)}
         </div>
       );
     }
@@ -595,8 +709,189 @@ export function App() {
     return null;
   };
 
-  // Render state-specific content
+  // Render state update based on state key
+  const renderStateUpdate = (stateKey: StateKey, content: any) => {
+    if (content === null) {
+      // Don't show anything for null state updates - these are internal processing steps
+      return null;
+    }
+
+    switch (stateKey) {
+      case "$.load_calendar":
+        return renderCalendarUpdate(content);
+      case "$.load_invitees":
+        return renderInviteesUpdate(content);
+      case "$.get_rescheduling_proposals":
+        return renderReschedulingProposalsUpdate(content);
+      default:
+        return (
+          <div className="p-3 bg-gray-100 rounded-lg text-sm">
+            <strong>{getStateKeyDescription(stateKey)}</strong>
+            <pre className="text-xs mt-2 overflow-x-auto">
+              {JSON.stringify(content, null, 2)}
+            </pre>
+          </div>
+        );
+    }
+  };
+
+  // Render response based on response type
+  const renderResponse = (responseType: string, content: any) => {
+    switch (responseType) {
+      case "LoadCalendarResponse":
+        return renderCalendarUpdate(content);
+      case "LoadInviteesResponse":
+        return renderInviteesUpdate(content);
+      case "GetReschedulingProposalsResponse":
+        return renderReschedulingProposalsUpdate(content);
+      case "SendMessageResponse":
+        return renderMessageResponse("Sent", content.sent_message);
+      case "ReceiveMessageResponse":
+        return renderMessageResponse("Received", content.received_message);
+      case "AnalyzeMessageResponse":
+        return (
+          <div className="p-3 bg-blue-50 rounded-lg text-sm">
+            <strong>Message Analysis:</strong> {content.message_analysis}
+          </div>
+        );
+      default:
+        return (
+          <div className="p-3 bg-gray-100 rounded-lg text-sm">
+            <strong>{responseType}</strong>
+            <pre className="text-xs mt-2 overflow-x-auto">
+              {JSON.stringify(content, null, 2)}
+            </pre>
+          </div>
+        );
+    }
+  };
+
+  // Helper function to get human-readable description of state keys
+  const getStateKeyDescription = (stateKey: StateKey): string => {
+    switch (stateKey) {
+      case "$.introduction": return "Introduction";
+      case "$.confirm_start": return "Confirm Start";
+      case "$.load_calendar": return "Load Calendar";
+      case "$.summarize_calendar": return "Summarize Calendar";
+      case "$.load_invitees": return "Load Invitees";
+      case "$.before_rescheduling_proposals": return "Before Rescheduling Proposals";
+      case "$.get_rescheduling_proposals": return "Get Rescheduling Proposals";
+      case "$.confirm_rescheduling_proposals": return "Confirm Rescheduling Proposals";
+      case "$.invoke_send_rescheduling_proposal_to_invitee": return "Send Rescheduling Proposal";
+      case "$.final_summarization": return "Final Summarization";
+      default: return stateKey;
+    }
+  };
+
+  // Render calendar update
+  const renderCalendarUpdate = (data: any) => {
+    const calendar = data.calendar || data;
+    if (!calendar || !calendar.events) {
+      return (
+        <div className="p-3 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
+          Loading calendar...
+        </div>
+      );
+    }
+
+    // For now, just show a simple calendar display
+    return (
+      <div className="p-3 bg-white rounded-lg border shadow-sm">
+        <h4 className="font-medium text-gray-900 mb-2 text-sm">Calendar Loaded</h4>
+        <div className="text-xs text-gray-600">
+          {calendar.events?.length || 0} events found
+        </div>
+        {calendar.events?.map((event: any, index: number) => (
+          <div key={index} className="mt-2 p-2 bg-gray-50 rounded text-xs">
+            <div className="font-medium">{event.title}</div>
+            <div className="text-gray-600">
+              {new Date(event.start_time).toLocaleTimeString()} - {new Date(event.end_time).toLocaleTimeString()}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Render invitees update
+  const renderInviteesUpdate = (data: any) => {
+    const invitees = data.invitees || [];
+    const inviteeCalendars = data.invitee_calendars || {};
+    
+    if (invitees.length === 0) {
+      return (
+        <div className="p-3 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
+          Loading invitees...
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-3 bg-white rounded-lg border shadow-sm">
+        <h4 className="font-medium text-gray-900 mb-2 text-sm">Invitees Loaded</h4>
+        <div className="flex flex-wrap gap-2">
+          {invitees.map((invitee: User) => (
+            <div key={invitee.id} className="flex items-center space-x-2 bg-gray-50 px-2 py-1 rounded">
+              <img
+                src={invitee.avatar_url}
+                alt={`${invitee.given_name}'s avatar`}
+                className="w-6 h-6 rounded-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=";
+                }}
+              />
+              <span className="text-xs font-medium text-gray-700">{invitee.given_name}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Render rescheduling proposals update
+  const renderReschedulingProposalsUpdate = (data: any) => {
+    const proposals = data.pending_rescheduling_proposals || [];
+    
+    if (proposals.length === 0) {
+      return (
+        <div className="p-3 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
+          No rescheduling proposals found
+        </div>
+      );
+    }
+
+    return (
+      <div className="p-3 bg-white rounded-lg border shadow-sm">
+        <h4 className="font-medium text-gray-900 mb-2 text-sm">Rescheduling Proposals</h4>
+        <div className="space-y-2">
+          {proposals.map((proposal: PendingRescheduledEvent, index: number) => (
+            <div key={index} className="p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+              <p><strong>Event:</strong> {proposal.original_event?.title}</p>
+              <p><strong>New Time:</strong> {new Date(proposal.new_start_time).toLocaleTimeString()} - {new Date(proposal.new_end_time).toLocaleTimeString()}</p>
+              <p><strong>Reason:</strong> {proposal.explanation}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Render message response
+  const renderMessageResponse = (type: string, message: any) => {
+    return (
+      <div className="p-3 bg-blue-50 rounded-lg text-sm">
+        <strong>{type} Message:</strong> {message.content}
+        <div className="text-xs text-gray-600 mt-1">
+          From: {message.from_user?.given_name} → To: {message.to_user?.given_name}
+        </div>
+      </div>
+    );
+  };
+
+  // Render state-specific content using accumulated state
   const renderStateContent = (state: any) => {
+    // This function is now deprecated in favor of renderStateUpdate and renderResponse
+    // But we'll keep it for backward compatibility
     console.log("renderStateContent called with state type:", state.type);
     console.log("State data:", state);
     
@@ -979,147 +1274,12 @@ export function App() {
       );
     };
 
-    // Handle different state types
-    if (state.type === "InitialState") {
-      console.log("Handling InitialState");
-      // Nothing to show for initial state
-      return null;
-    }
-
-    if (state.type === "StateWithCalendar") {
-      console.log("Handling StateWithCalendar");
-      const calendarState = state as StateWithCalendar;
-      return renderTimeBasedCalendar(
-        calendarState.calendar,
-        calendarState.user
-      );
-    }
-
-    if (state.type === "StateWithInvitees") {
-      console.log("Handling StateWithInvitees");
-      const inviteeState = state as StateWithInvitees;
-      return renderTimeBasedCalendar(
-        inviteeState.calendar,
-        inviteeState.user,
-        inviteeState.invitees,
-        inviteeState.invitee_calendars
-      );
-    }
-
-    if (state.type === "StateWithPendingReschedulingProposals") {
-      console.log("Handling StateWithPendingReschedulingProposals");
-      const reschedulingState = state as StateWithPendingReschedulingProposals;
+    // This function is now deprecated - the new stream format uses incremental updates
+    // Return a message indicating this is legacy code
       return (
-        <>
-          {renderTimeBasedCalendar(
-            reschedulingState.calendar,
-            reschedulingState.user,
-            reschedulingState.invitees,
-            reschedulingState.invitee_calendars,
-            reschedulingState.pending_rescheduling_proposals
-          )}
-
-          {/* Pending Rescheduling Proposals */}
-          <div className="mt-4 space-y-2 text-sm text-gray-700">
-            {reschedulingState.pending_rescheduling_proposals.map(
-              (proposal, index) => (
-                <div key={index} className="p-3 bg-white rounded-lg border shadow-sm">
-                  <p className="text-sm">
-                    <strong>Event:</strong>{" "}
-                    <strong>{proposal.original_event?.title || "Unknown Event"}</strong>
-                  </p>
-                  <p className="text-sm">
-                    <strong>Start Time Change:</strong>{" "}
-                    <span className="text-red-600 font-medium">
-                      {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
-                    </span>
-                    {" → "}
-                    <span className="text-green-600 font-medium">
-                      {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
-                    </span>
-                  </p>
-                  <p className="text-sm">
-                    <strong>End Time Change:</strong>{" "}
-                    <span className="text-red-600 font-medium">
-                      {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
-                    </span>
-                    {" → "}
-                    <span className="text-green-600 font-medium">
-                      {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}
-                    </span>
-                  </p>
-                  <p className="text-sm">
-                    <strong>Reason:</strong> {proposal.explanation}
-                  </p>
-                </div>
-              )
-            )}
-          </div>
-        </>
-      );
-    }
-
-    if (state.type === "StateWithCompletedReschedulingProposals") {
-      console.log("Handling StateWithCompletedReschedulingProposals");
-      const completedState = state as StateWithCompletedReschedulingProposals;
-      return (
-        <>
-          {renderTimeBasedCalendar(
-            completedState.calendar,
-            completedState.user,
-            completedState.invitees,
-            completedState.invitee_calendars,
-            completedState.pending_rescheduling_proposals
-          )}
-
-          {/* Completed Rescheduling Proposals */}
-          <div className="bg-green-50 p-3 rounded-lg border border-green-200">
-            <h4 className="font-medium text-green-900 mb-2 text-sm">
-              ✅ Completed Rescheduling Proposals (
-              {completedState.completed_rescheduling_proposals.length})
-            </h4>
-            <div className="space-y-1 text-xs text-green-800">
-              {completedState.completed_rescheduling_proposals.map(
-                (proposal, index) => (
-                  <div key={index} className="p-2 bg-green-100 rounded">
-                    <p className="text-xs">
-                      <strong>Event:</strong>{" "}
-                      {proposal.original_event?.title || "Unknown Event"}
-                    </p>
-                    <p className="text-xs">
-                      <strong>Time Change:</strong>{" "}
-                      <span className="text-red-600 font-medium">
-                        {new Date(proposal.original_event?.start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.original_event?.end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                      </span>
-                      {" → "}
-                      <span className="text-green-600 font-medium">
-                        {new Date(proposal.new_start_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})} - {new Date(proposal.new_end_time).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}
-                      </span>
-                    </p>
-                    <p className="text-xs">
-                      <strong>Status:</strong>{" "}
-                      {proposal.type === "AcceptedRescheduledEvent"
-                        ? "✅ Accepted"
-                        : "❌ Rejected"}
-                    </p>
-                    <p className="text-xs">
-                      <strong>Reason:</strong> {proposal.explanation}
-                    </p>
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-        </>
-      );
-    }
-
-    // Default state display
-    console.log("No matching state type, showing default display");
-    return (
-      <div className="p-3 bg-gray-100 rounded-lg text-left">
-        <h2 className="font-semibold mb-1 text-sm">Current State:</h2>
-        <pre className="text-xs overflow-y-auto whitespace-pre-wrap h-[300px]">
+      <div className="p-3 bg-yellow-50 rounded-lg text-sm">
+        <strong>Legacy State Display:</strong> This state type is no longer used in the new stream format.
+        <pre className="text-xs mt-2 overflow-x-auto">
           {JSON.stringify(state, null, 2)}
         </pre>
       </div>
@@ -1168,8 +1328,8 @@ export function App() {
                   {Array.from(seenStateIdsRef.current).length}
                 </p>
                 <p className="text-xs">
-                  <strong>Current State Type:</strong>{" "}
-                  {currentState?.type || "None"}
+                  <strong>Accumulated State:</strong>{" "}
+                  {Object.keys(accumulatedState).length > 0 ? Object.keys(accumulatedState).join(", ") : "None"}
                 </p>
                 <p className="text-xs">
                   <strong>Waiting for Next State:</strong>{" "}
