@@ -316,7 +316,8 @@ const MessageStatusComponent = ({
   const cardRef = useRef<HTMLDivElement>(null);
 
   const handleMouseEnter = (e: React.MouseEvent) => {
-    if (conversation && conversation.length > 0) {
+    // Only show tooltip if analysis is complete and conversation exists
+    if (analyzed && conversation && conversation.length > 0) {
       const rect = cardRef.current?.getBoundingClientRect();
       if (rect) {
         setTooltipPosition({
@@ -361,7 +362,9 @@ const MessageStatusComponent = ({
     <>
       <div 
         ref={cardRef}
-        className="p-3 bg-white rounded-lg border shadow-sm w-64 flex-shrink-0 cursor-pointer hover:shadow-md transition-shadow"
+        className={`p-3 bg-white rounded-lg border shadow-sm w-64 flex-shrink-0 transition-shadow ${
+          analyzed ? 'cursor-pointer hover:shadow-md' : 'cursor-default'
+        }`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
       >
@@ -452,8 +455,8 @@ const MessageStatusComponent = ({
         </div>
       </div>
       
-      {/* Hover to view text - only show when message has been analyzed */}
-      {analyzed && (
+      {/* Hover to view text - only show when message has been analyzed and conversation exists */}
+      {analyzed && conversation && conversation.length > 0 && (
         <div className="mt-2 text-center">
           <span className="text-xs text-gray-400 italic">(Hover to view)</span>
         </div>
