@@ -366,6 +366,11 @@
       },
       "IncomingMessage": {
         "properties": {
+          "platform_id": {
+            "type": "string",
+            "enum": ["slack", "microsoft-teams"],
+            "title": "Platform Id"
+          },
           "content": { "type": "string", "title": "Content" },
           "sent_at": {
             "type": "string",
@@ -376,7 +381,13 @@
           "to_user": { "$ref": "#/components/schemas/User" }
         },
         "type": "object",
-        "required": ["content", "sent_at", "from_user", "to_user"],
+        "required": [
+          "platform_id",
+          "content",
+          "sent_at",
+          "from_user",
+          "to_user"
+        ],
         "title": "IncomingMessage",
         "description": "A message received from another user."
       },
@@ -434,6 +445,11 @@
       },
       "OutgoingMessage": {
         "properties": {
+          "platform_id": {
+            "type": "string",
+            "enum": ["slack", "microsoft-teams"],
+            "title": "Platform Id"
+          },
           "content": { "type": "string", "title": "Content" },
           "sent_at": {
             "type": "string",
@@ -444,7 +460,13 @@
           "to_user": { "$ref": "#/components/schemas/User" }
         },
         "type": "object",
-        "required": ["content", "sent_at", "from_user", "to_user"],
+        "required": [
+          "platform_id",
+          "content",
+          "sent_at",
+          "from_user",
+          "to_user"
+        ],
         "title": "OutgoingMessage",
         "description": "A message sent by the user."
       },

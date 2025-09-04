@@ -1,5 +1,5 @@
 import "./index.css";
-import React, { useState, useRef, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
 
 // Type definitions based on the OpenAPI schema
@@ -70,10 +70,12 @@ interface ReceiveMessageResponse {
 }
 
 interface AnalyzeMessageResponse {
+  type: string;
   message_analysis: "positive" | "negative" | "unknown";
 }
 
 interface OutgoingMessage {
+  platform_id: "slack" | "microsoft-teams";
   content: string;
   sent_at: string;
   from_user: User;
@@ -81,10 +83,46 @@ interface OutgoingMessage {
 }
 
 interface IncomingMessage {
+  platform_id: "slack" | "microsoft-teams";
   content: string;
   sent_at: string;
   from_user: User;
   to_user: User;
+}
+
+// Subgraph message tracking interfaces
+interface SubgraphMessageStatus {
+  uuid: string;
+  toUser: User;
+  fromUser: User;
+  platform: "slack" | "microsoft-teams";
+  sent?: OutgoingMessage;
+  received?: IncomingMessage;
+  analyzed?: AnalyzeMessageResponse;
+}
+
+interface SubgraphMessageStates {
+  [uuid: string]: SubgraphMessageStatus;
+}
+
+// Conversation interfaces
+interface ConversationMessage {
+  platform_id: "slack" | "microsoft-teams";
+  content: string;
+  sent_at: string;
+  from_user: User;
+  to_user: User;
+}
+
+interface InvokeSendReschedulingProposalResponse {
+  type: "InvokeSendReschedulingProposalResponse";
+  conversations_by_invitee: {
+    [inviteeId: string]: ConversationMessage[];
+  };
+}
+
+interface ConversationState {
+  [inviteeId: string]: ConversationMessage[];
 }
 
 // State key types for the new stream format
@@ -146,6 +184,288 @@ function generateUUID(): string {
   });
 }
 
+// Custom hook for relative time formatting
+const useRelativeTime = (timestamp: string) => {
+  const [relativeTime, setRelativeTime] = useState('');
+
+  const updateRelativeTime = useCallback(() => {
+    const now = new Date();
+    const messageTime = new Date(timestamp);
+    const diffInSeconds = Math.floor((now.getTime() - messageTime.getTime()) / 1000);
+
+    if (diffInSeconds < 60) {
+      setRelativeTime(`${diffInSeconds}s`);
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      setRelativeTime(`${minutes}m`);
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      setRelativeTime(`${hours}h`);
+    } else {
+      const days = Math.floor(diffInSeconds / 86400);
+      setRelativeTime(`${days}d`);
+    }
+  }, [timestamp]);
+
+  useEffect(() => {
+    updateRelativeTime();
+    const interval = setInterval(updateRelativeTime, 15000); // Update every 15 seconds
+    return () => clearInterval(interval);
+  }, [updateRelativeTime]);
+
+  return relativeTime;
+};
+
+// Message Component with relative time
+const MessageComponent = ({ 
+  message, 
+  isFromAgent, 
+  agentUser, 
+  inviteeUser 
+}: { 
+  message: ConversationMessage; 
+  isFromAgent: boolean; 
+  agentUser: User; 
+  inviteeUser: User; 
+}) => {
+  const relativeTime = useRelativeTime(message.sent_at);
+
+  return (
+    <div className={`flex ${isFromAgent ? 'justify-start' : 'justify-end'}`}>
+      <div className={`flex items-start space-x-2 max-w-[80%] ${isFromAgent ? 'flex-row' : 'flex-row-reverse space-x-reverse'}`}>
+        <img
+          src={message.from_user.avatar_url}
+          alt={`${message.from_user.given_name}'s avatar`}
+          className="w-6 h-6 rounded-full object-cover flex-shrink-0"
+          onError={(e) => {
+            e.currentTarget.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=";
+          }}
+        />
+        <div className={`flex-1 min-w-0 ${isFromAgent ? 'text-left' : 'text-right'}`}>
+          <div className={`text-xs text-gray-500 mb-1 ${isFromAgent ? 'text-left' : 'text-right'}`}>
+            {message.from_user.given_name} • {relativeTime}
+          </div>
+          <div className={`text-sm text-gray-900 break-words p-2 rounded-lg ${
+            isFromAgent 
+              ? 'bg-blue-100 text-blue-900' 
+              : 'bg-gray-100 text-gray-900'
+          }`}>
+            {message.content}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Conversation Tooltip Component
+const ConversationTooltip = ({ 
+  conversation, 
+  isVisible, 
+  position,
+  agentUser,
+  inviteeUser
+}: { 
+  conversation: ConversationMessage[]; 
+  isVisible: boolean; 
+  position: { x: number; y: number };
+  agentUser: User;
+  inviteeUser: User;
+}) => {
+  if (!isVisible || conversation.length === 0) return null;
+
+  return (
+    <div 
+      className="fixed z-50 bg-white border border-gray-300 rounded-lg shadow-lg p-4 max-w-sm"
+      style={{
+        left: position.x,
+        top: position.y - 10, // Add 10px margin above the element
+        transform: 'translate(-50%, -100%)'
+      }}
+    >
+      <div className="space-y-2 max-h-64 overflow-y-auto">
+        {conversation.map((message, index) => {
+          const isFromAgent = message.from_user.id === agentUser.id;
+          return (
+            <MessageComponent
+              key={index}
+              message={message}
+              isFromAgent={isFromAgent}
+              agentUser={agentUser}
+              inviteeUser={inviteeUser}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// Message Status Component
+const MessageStatusComponent = ({ 
+  status, 
+  conversation 
+}: { 
+  status: SubgraphMessageStatus; 
+  conversation?: ConversationMessage[] 
+}) => {
+  const { uuid, toUser, platform, sent, received, analyzed } = status;
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    if (conversation && conversation.length > 0) {
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (rect) {
+        setTooltipPosition({
+          x: rect.left + rect.width / 2,
+          y: rect.top
+        });
+        setShowTooltip(true);
+      }
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setShowTooltip(false);
+  };
+  
+  // Platform logo component
+  const PlatformLogo = ({ platform }: { platform: "slack" | "microsoft-teams" }) => {
+    if (platform === "slack") {
+      return (
+        <div className="w-4 h-4 flex-shrink-0">
+          <svg width="16" height="16" viewBox="0 0 127 127" xmlns="http://www.w3.org/2000/svg">
+            <path d="M27.2 80c0 7.3-5.9 13.2-13.2 13.2C6.7 93.2.8 87.3.8 80c0-7.3 5.9-13.2 13.2-13.2h13.2V80zm6.6 0c0-7.3 5.9-13.2 13.2-13.2 7.3 0 13.2 5.9 13.2 13.2v33c0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V80z" fill="#E01E5A"/>
+            <path d="M47 27c-7.3 0-13.2-5.9-13.2-13.2C33.8 6.5 39.7.6 47 .6c7.3 0 13.2 5.9 13.2 13.2V27H47zm0 6.7c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H13.9C6.6 60.1.7 54.2.7 46.9c0-7.3 5.9-13.2 13.2-13.2H47z" fill="#36C5F0"/>
+            <path d="M99.9 46.9c0-7.3 5.9-13.2 13.2-13.2 7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H99.9V46.9zm-6.6 0c0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V13.8C66.9 6.5 72.8.6 80.1.6c7.3 0 13.2 5.9 13.2 13.2v33.1z" fill="#2EB67D"/>
+            <path d="M80.1 99.8c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2-7.3 0-13.2-5.9-13.2-13.2V99.8h13.2zm0-6.6c-7.3 0-13.2-5.9-13.2-13.2 0-7.3 5.9-13.2 13.2-13.2h33.1c7.3 0 13.2 5.9 13.2 13.2 0 7.3-5.9 13.2-13.2 13.2H80.1z" fill="#ECB22E"/>
+          </svg>
+        </div>
+      );
+    } else {
+      return (
+        <div className="w-4 h-4 flex-shrink-0">
+          <svg width="16" height="16" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <path d="M 62.652344 60.660156 L 62.652344 44.929688 C 62.652344 44.539062 62.792969 44.203125 63.074219 43.925781 C 63.359375 43.648438 63.699219 43.507812 64.101562 43.507812 L 80.359375 43.507812 C 80.726562 43.507812 81.082031 43.578125 81.421875 43.714844 C 81.761719 43.851562 82.058594 44.050781 82.320312 44.304688 C 82.578125 44.558594 82.78125 44.851562 82.921875 45.1875 C 83.0625 45.519531 83.132812 45.863281 83.132812 46.226562 L 83.132812 60.660156 C 83.132812 61.316406 83.066406 61.964844 82.9375 62.609375 C 82.804688 63.253906 82.613281 63.878906 82.355469 64.484375 C 82.097656 65.089844 81.785156 65.664062 81.414062 66.210938 C 81.039062 66.757812 80.617188 67.261719 80.144531 67.726562 C 79.671875 68.191406 79.15625 68.605469 78.597656 68.96875 C 78.039062 69.332031 77.453125 69.640625 76.832031 69.894531 C 76.214844 70.144531 75.578125 70.332031 74.917969 70.460938 C 74.261719 70.589844 73.597656 70.652344 72.929688 70.652344 L 72.855469 70.652344 C 72.183594 70.652344 71.519531 70.589844 70.863281 70.460938 C 70.207031 70.332031 69.566406 70.144531 68.949219 69.894531 C 68.328125 69.640625 67.742188 69.332031 67.183594 68.96875 C 66.628906 68.605469 66.113281 68.191406 65.640625 67.726562 C 65.164062 67.261719 64.742188 66.757812 64.371094 66.210938 C 63.996094 65.664062 63.683594 65.089844 63.425781 64.484375 C 63.171875 63.878906 62.976562 63.253906 62.847656 62.609375 C 62.714844 61.964844 62.652344 61.316406 62.652344 60.660156 Z M 62.652344 60.660156 " fill="#1F3A7A"/>
+            <path d="M 79.519531 33.476562 C 79.519531 33.902344 79.476562 34.324219 79.390625 34.742188 C 79.304688 35.160156 79.179688 35.566406 79.011719 35.960938 C 78.847656 36.355469 78.640625 36.730469 78.402344 37.082031 C 78.160156 37.4375 77.882812 37.765625 77.578125 38.066406 C 77.269531 38.367188 76.933594 38.636719 76.574219 38.875 C 76.210938 39.109375 75.828125 39.3125 75.425781 39.472656 C 75.023438 39.636719 74.609375 39.761719 74.183594 39.84375 C 73.757812 39.925781 73.328125 39.96875 72.890625 39.96875 C 72.457031 39.96875 72.023438 39.925781 71.597656 39.84375 C 71.171875 39.761719 70.757812 39.636719 70.355469 39.472656 C 69.953125 39.3125 69.570312 39.109375 69.210938 38.875 C 68.847656 38.636719 68.511719 38.367188 68.207031 38.066406 C 67.898438 37.765625 67.625 37.4375 67.382812 37.082031 C 67.140625 36.730469 66.9375 36.355469 66.769531 35.960938 C 66.601562 35.566406 66.476562 35.160156 66.390625 34.742188 C 66.308594 34.324219 66.265625 33.902344 66.265625 33.476562 C 66.265625 33.050781 66.308594 32.628906 66.390625 32.210938 C 66.476562 31.792969 66.601562 31.386719 66.769531 30.992188 C 66.9375 30.597656 67.140625 30.226562 67.382812 29.871094 C 67.625 29.515625 67.898438 29.1875 68.207031 28.886719 C 68.511719 28.585938 68.847656 28.316406 69.210938 28.078125 C 69.570312 27.84375 69.953125 27.644531 70.355469 27.480469 C 70.757812 27.316406 71.171875 27.195312 71.597656 27.109375 C 72.023438 27.027344 72.457031 26.984375 72.890625 26.984375 C 73.328125 26.984375 73.757812 27.027344 74.183594 27.109375 C 74.609375 27.195312 75.023438 27.316406 75.425781 27.480469 C 75.828125 27.644531 76.210938 27.84375 76.574219 28.078125 C 76.933594 28.316406 77.269531 28.585938 77.578125 28.886719 C 77.882812 29.1875 78.160156 29.515625 78.402344 29.871094 C 78.640625 30.226562 78.847656 30.597656 79.011719 30.992188 C 79.179688 31.386719 79.304688 31.792969 79.390625 32.210938 C 79.476562 32.628906 79.519531 33.050781 79.519531 33.476562 Z M 79.519531 33.476562 " fill="#1F3A7A"/>
+          </svg>
+        </div>
+      );
+    }
+  };
+
+  return (
+    <>
+      <div 
+        ref={cardRef}
+        className="p-3 bg-white rounded-lg border shadow-sm w-64 flex-shrink-0 cursor-pointer hover:shadow-md transition-shadow"
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+      <div className="flex items-center space-x-3">
+        {/* User Avatar */}
+        <img
+          src={toUser.avatar_url}
+          alt={`${toUser.given_name}'s avatar`}
+          className="w-10 h-10 rounded-full object-cover border-2 border-gray-300"
+          onError={(e) => {
+            e.currentTarget.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=";
+          }}
+        />
+        
+        {/* Platform Logo */}
+        <PlatformLogo platform={platform} />
+        
+        {/* User Name */}
+        <div className="font-medium text-gray-900 text-sm">{toUser.given_name}</div>
+      </div>
+      
+      {/* Status Steps */}
+      <div className="mt-3 space-y-2">
+        {/* Message Sent */}
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 flex-shrink-0">
+            {sent ? (
+              <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <div className="w-4 h-4 border-2 border-gray-300 rounded-full"></div>
+            )}
+          </div>
+          <span className={`text-sm ${sent ? 'text-gray-500' : 'text-gray-900'}`}>
+            Message sent
+          </span>
+        </div>
+        
+        {/* Message Received */}
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 flex-shrink-0">
+            {received ? (
+              <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+              </svg>
+            ) : sent ? (
+              <div className="w-4 h-4 border-2 border-gray-400 rounded-full animate-pulse"></div>
+            ) : (
+              <div className="w-4 h-4 border-2 border-gray-300 rounded-full"></div>
+            )}
+          </div>
+          <span className={`text-sm ${received ? 'text-gray-500' : sent ? 'text-gray-900' : 'text-gray-400'}`}>
+            Message received
+          </span>
+        </div>
+        
+        {/* Message Analyzed */}
+        <div className="flex items-center space-x-2">
+          <div className="w-4 h-4 flex-shrink-0">
+            {analyzed ? (
+              <div className="w-4 h-4 flex items-center justify-center">
+                {analyzed.message_analysis === "positive" ? (
+                  <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                ) : analyzed.message_analysis === "negative" ? (
+                  <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                  </svg>
+                ) : (
+                  <div className="w-4 h-4 border-2 border-yellow-500 rounded-full"></div>
+                )}
+              </div>
+            ) : received ? (
+              <div className="w-4 h-4 border-2 border-gray-400 rounded-full animate-pulse"></div>
+            ) : (
+              <div className="w-4 h-4 border-2 border-gray-300 rounded-full"></div>
+            )}
+          </div>
+          <span className={`text-sm ${analyzed ? 'text-gray-500' : received ? 'text-gray-900' : 'text-gray-400'}`}>
+            {analyzed ? (
+              analyzed.message_analysis === "positive" ? "Accepted rescheduling" :
+              analyzed.message_analysis === "negative" ? "Rejected rescheduling" :
+              "Analyzing message"
+            ) : received ? "Analyzing message" : "Message analyzed"}
+          </span>
+        </div>
+      </div>
+      </div>
+      
+      {/* Conversation Tooltip */}
+      {conversation && (
+        <ConversationTooltip
+          conversation={conversation}
+          isVisible={showTooltip}
+          position={tooltipPosition}
+          agentUser={status.fromUser} // The agent is the one sending messages
+          inviteeUser={status.toUser} // The invitee is the recipient
+        />
+      )}
+    </>
+  );
+};
+
 export function App() {
   const [isStarted, setIsStarted] = useState(false);
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
@@ -159,6 +479,8 @@ export function App() {
   const [currentInterrupt, setCurrentInterrupt] = useState<Interrupt | null>(null);
   const [isResuming, setIsResuming] = useState(false);
   const [selectedInterruptOptions, setSelectedInterruptOptions] = useState<Record<string, string>>({});
+  const [subgraphMessages, setSubgraphMessages] = useState<SubgraphMessageStates>({});
+  const [conversations, setConversations] = useState<ConversationState>({});
   const seenStateIdsRef = useRef<Set<string>>(new Set());
   const [threadId] = useState<string>(() => generateUUID());
   const timelineContainerRef = useRef<HTMLDivElement>(null);
@@ -168,10 +490,10 @@ export function App() {
     console.log(`Generated thread_id: ${threadId}`);
   }, [threadId]);
 
-  // Auto-scroll to bottom when timeline updates
+  // Auto-scroll to bottom when timeline updates or subgraph messages change
   useEffect(() => {
-    if (timelineContainerRef.current && timeline.length > 0) {
-      console.log('Auto-scrolling to bottom, timeline length:', timeline.length);
+    if (timelineContainerRef.current && (timeline.length > 0 || Object.keys(subgraphMessages).length > 0)) {
+      console.log('Auto-scrolling to bottom, timeline length:', timeline.length, 'subgraph messages:', Object.keys(subgraphMessages).length);
       console.log('Container scrollHeight:', timelineContainerRef.current.scrollHeight);
       console.log('Container clientHeight:', timelineContainerRef.current.clientHeight);
       
@@ -185,7 +507,7 @@ export function App() {
         }
       }, 100);
     }
-  }, [timeline]);
+  }, [timeline, subgraphMessages]);
 
   // Function to fetch user information for invitees
   const fetchInviteeUser = async (userId: string) => {
@@ -270,6 +592,71 @@ export function App() {
     });
   };
 
+  // Helper function to process conversation responses
+  const processConversationResponse = (data: InvokeSendReschedulingProposalResponse) => {
+    setConversations(prev => ({
+      ...prev,
+      ...data.conversations_by_invitee
+    }));
+  };
+
+  // Helper function to process subgraph message responses
+  const processSubgraphMessageResponse = (data: any, responseType: string) => {
+    // Extract UUID from the response type pattern
+    // Pattern: $.invoke_send_rescheduling_proposal_to_invitee:[uuid].send_message
+    const uuidMatch = responseType.match(/\.invoke_send_rescheduling_proposal_to_invitee:([^.]+)\.(.+)/);
+    if (!uuidMatch) return;
+    
+    const [, uuid, stage] = uuidMatch;
+    
+    setSubgraphMessages(prev => {
+      const updated = { ...prev };
+      
+      if (!updated[uuid]) {
+        // Initialize subgraph message status
+        updated[uuid] = {
+          uuid,
+          toUser: data.sent_message?.to_user || data.received_message?.to_user || { 
+            id: '', 
+            given_name: 'Unknown', 
+            timezone: 'UTC', 
+            avatar_url: '', 
+            preffered_working_hours: [9, 17] 
+          },
+          fromUser: data.sent_message?.from_user || data.received_message?.from_user || { 
+            id: '', 
+            given_name: 'Unknown', 
+            timezone: 'UTC', 
+            avatar_url: '', 
+            preffered_working_hours: [9, 17] 
+          },
+          platform: data.sent_message?.platform_id || data.received_message?.platform_id || 'slack'
+        };
+      }
+      
+      // Update the appropriate stage
+      switch (stage) {
+        case 'send_message':
+          if (data.sent_message) {
+            updated[uuid].sent = data.sent_message;
+          }
+          break;
+        case 'receive_message':
+          if (data.received_message) {
+            updated[uuid].received = data.received_message;
+          }
+          break;
+        case 'analyze_message':
+          if (data.message_analysis) {
+            updated[uuid].analyzed = data;
+          }
+          break;
+      }
+      
+      return updated;
+    });
+  };
+
   // Helper function to update accumulated state from response objects
   const updateAccumulatedStateFromResponse = (data: any) => {
     setAccumulatedState(prev => {
@@ -335,6 +722,9 @@ export function App() {
             }
             newState.conversations[conversationKey].push(data.received_message);
           }
+          break;
+        case "AnalyzeMessageResponse":
+          // This will be handled by the subgraph message tracking
           break;
         default:
           console.log(`Unhandled response type: ${data.type}`);
@@ -452,29 +842,45 @@ export function App() {
               const stateKey = Object.keys(data).find(key => key.startsWith('$.')) as StateKey;
               
               if (stateKey) {
-                // This is a state update
-                console.log(`Processing resumed state update: ${stateKey}`);
-                
-                if (!seenStateKeys.has(stateKey)) {
-                  setSeenStateKeys(prev => new Set([...prev, stateKey]));
-                  setWaitingForNextState(false);
+                // Check if this is a conversation response
+                if (stateKey === '$.invoke_send_rescheduling_proposal_to_invitee') {
+                  // This is a conversation response
+                  console.log(`Processing resumed conversation response: ${stateKey}`);
+                  processConversationResponse(data[stateKey]);
+                  
+                  // Don't add to timeline - conversation data is only used for tooltips
+                } else if (stateKey.startsWith('$.invoke_send_rescheduling_proposal_to_invitee:')) {
+                  // This is a subgraph message response
+                  console.log(`Processing resumed subgraph message response: ${stateKey}`);
+                  processSubgraphMessageResponse(data[stateKey], stateKey);
+                  
+                  // Don't add to timeline - subgraph messages are displayed separately
+                  // The MessageStatusComponent will automatically update when subgraphMessages state changes
+                } else {
+                  // This is a regular state update
+                  console.log(`Processing resumed state update: ${stateKey}`);
+                  
+                  if (!seenStateKeys.has(stateKey)) {
+                    setSeenStateKeys(prev => new Set([...prev, stateKey]));
+                    setWaitingForNextState(false);
 
-                  // Only add to timeline if there's actual content (not null)
-                  if (data[stateKey] !== null) {
-                    setTimeline((prev) => [
-                      ...prev,
-                      {
-                        id: `state_${stateKey}_${Date.now()}`,
-                        timestamp: Date.now(),
-                        type: "state_update" as const,
-                        content: data[stateKey],
-                        stateKey: stateKey,
-                      },
-                    ]);
+                    // Only add to timeline if there's actual content (not null)
+                    if (data[stateKey] !== null) {
+                      setTimeline((prev) => [
+                        ...prev,
+                        {
+                          id: `state_${stateKey}_${Date.now()}`,
+                          timestamp: Date.now(),
+                          type: "state_update" as const,
+                          content: data[stateKey],
+                          stateKey: stateKey,
+                        },
+                      ]);
+                    }
+
+                    // Update accumulated state
+                    updateAccumulatedState(stateKey, data[stateKey]);
                   }
-
-                  // Update accumulated state
-                  updateAccumulatedState(stateKey, data[stateKey]);
                 }
               } else if (data.type) {
                 // This is a response object
@@ -518,6 +924,8 @@ export function App() {
     setCurrentInterrupt(null);
     setIsResuming(false);
     setSelectedInterruptOptions({});
+    setSubgraphMessages({});
+    setConversations({});
     seenStateIdsRef.current = new Set();
 
     try {
@@ -609,29 +1017,45 @@ export function App() {
               const stateKey = Object.keys(data).find(key => key.startsWith('$.')) as StateKey;
               
               if (stateKey) {
-                // This is a state update
-                console.log(`Processing state update: ${stateKey}`);
-                
-                if (!seenStateKeys.has(stateKey)) {
-                  setSeenStateKeys(prev => new Set([...prev, stateKey]));
-                  setWaitingForNextState(false);
+                // Check if this is a conversation response
+                if (stateKey === '$.invoke_send_rescheduling_proposal_to_invitee') {
+                  // This is a conversation response
+                  console.log(`Processing conversation response: ${stateKey}`);
+                  processConversationResponse(data[stateKey]);
+                  
+                  // Don't add to timeline - conversation data is only used for tooltips
+                } else if (stateKey.startsWith('$.invoke_send_rescheduling_proposal_to_invitee:')) {
+                  // This is a subgraph message response
+                  console.log(`Processing subgraph message response: ${stateKey}`);
+                  processSubgraphMessageResponse(data[stateKey], stateKey);
+                  
+                  // Don't add to timeline - subgraph messages are displayed separately
+                  // The MessageStatusComponent will automatically update when subgraphMessages state changes
+                } else {
+                  // This is a regular state update
+                  console.log(`Processing state update: ${stateKey}`);
+                  
+                  if (!seenStateKeys.has(stateKey)) {
+                    setSeenStateKeys(prev => new Set([...prev, stateKey]));
+                    setWaitingForNextState(false);
 
-                  // Only add to timeline if there's actual content (not null)
-                  if (data[stateKey] !== null) {
-                    setTimeline((prev) => [
-                      ...prev,
-                      {
-                        id: `state_${stateKey}_${Date.now()}`,
-                        timestamp: Date.now(),
-                        type: "state_update" as const,
-                        content: data[stateKey],
-                        stateKey: stateKey,
-                      },
-                    ]);
+                    // Only add to timeline if there's actual content (not null)
+                    if (data[stateKey] !== null) {
+                      setTimeline((prev) => [
+                        ...prev,
+                        {
+                          id: `state_${stateKey}_${Date.now()}`,
+                          timestamp: Date.now(),
+                          type: "state_update" as const,
+                          content: data[stateKey],
+                          stateKey: stateKey,
+                        },
+                      ]);
+                    }
+
+                    // Update accumulated state
+                    updateAccumulatedState(stateKey, data[stateKey]);
                   }
-
-                  // Update accumulated state
-                  updateAccumulatedState(stateKey, data[stateKey]);
                 }
               } else if (data.type) {
                 // This is a response object
@@ -700,9 +1124,9 @@ export function App() {
                 disabled={isResuming || isConfirmed || isRejected}
                 className={`px-4 py-2 text-sm rounded-md transition-colors duration-200 font-medium ${
                   isConfirmed
-                    ? "bg-green-700 text-white cursor-default"
+                    ? "bg-gray-500 text-gray-300 cursor-default"
                     : isRejected
-                    ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                    ? "bg-white text-gray-500 border border-gray-300 cursor-not-allowed"
                     : "bg-green-600 hover:bg-green-700 text-white"
                 }`}
               >
@@ -713,9 +1137,9 @@ export function App() {
                 disabled={isResuming || isConfirmed || isRejected}
                 className={`px-4 py-2 text-sm rounded-md transition-colors duration-200 font-medium ${
                   isRejected
-                    ? "bg-red-700 text-white cursor-default"
+                    ? "bg-gray-500 text-gray-300 cursor-default"
                     : isConfirmed
-                    ? "bg-gray-400 text-gray-600 cursor-not-allowed"
+                    ? "bg-white text-gray-500 border border-gray-300 cursor-not-allowed"
                     : "bg-red-600 hover:bg-red-700 text-white"
                 }`}
               >
@@ -1700,8 +2124,27 @@ export function App() {
               {/* Render timeline items in chronological order */}
               {timeline.map(renderTimelineItem)}
 
-              {/* Show placeholder when waiting for next state or resuming */}
-              {(waitingForNextState || isResuming) && (
+              {/* Display subgraph messages */}
+              {Object.keys(subgraphMessages).length > 0 && (
+                <div className="mt-4">
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    {Object.values(subgraphMessages).map((status) => {
+                      // Find conversation for this user
+                      const conversation = conversations[status.toUser.id] || [];
+                      return (
+                        <MessageStatusComponent 
+                          key={status.uuid} 
+                          status={status} 
+                          conversation={conversation}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Show placeholder when waiting for next state or resuming, but not when we have subgraph messages */}
+              {(waitingForNextState || isResuming) && Object.keys(subgraphMessages).length === 0 && (
                 <div className="p-4 rounded-lg mb-3">
                   <div className="animate-pulse">
                     <div className="h-32 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 rounded"></div>
