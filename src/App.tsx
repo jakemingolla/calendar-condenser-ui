@@ -409,7 +409,7 @@ const MessageStatusComponent = ({
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
               </svg>
             ) : sent ? (
-              <div className="w-4 h-4 border-2 border-gray-400 rounded-full animate-pulse"></div>
+              <div className="w-4 h-4 border-2 border-gray-400 rounded-full"></div>
             ) : (
               <div className="w-4 h-4 border-2 border-gray-300 rounded-full"></div>
             )}
@@ -437,7 +437,7 @@ const MessageStatusComponent = ({
                 )}
               </div>
             ) : received ? (
-              <div className="w-4 h-4 border-2 border-gray-400 rounded-full animate-pulse"></div>
+              <div className="w-4 h-4 border-2 border-gray-400 rounded-full"></div>
             ) : (
               <div className="w-4 h-4 border-2 border-gray-300 rounded-full"></div>
             )}
@@ -479,9 +479,6 @@ export function App() {
   const [timeline, setTimeline] = useState<TimelineItem[]>([]);
   const [accumulatedState, setAccumulatedState] = useState<AccumulatedState>({});
   const [inviteeUsers, setInviteeUsers] = useState<Record<string, User>>({});
-  const [loadingInvitees, setLoadingInvitees] = useState<
-    Record<string, boolean>
-  >({});
   const [seenStateKeys, setSeenStateKeys] = useState<Set<StateKey>>(new Set());
   const [waitingForNextState, setWaitingForNextState] = useState(false);
   const [currentInterrupt, setCurrentInterrupt] = useState<Interrupt | null>(null);
@@ -521,8 +518,6 @@ export function App() {
   const fetchInviteeUser = async (userId: string) => {
     if (inviteeUsers[userId]) return; // Already fetched
 
-    setLoadingInvitees((prev) => ({ ...prev, [userId]: true }));
-
     try {
       const response = await fetch(
         `http://localhost:8000/api/v1/users/${userId}`
@@ -533,8 +528,6 @@ export function App() {
       }
     } catch (error) {
       console.error(`Failed to fetch user ${userId}:`, error);
-    } finally {
-      setLoadingInvitees((prev) => ({ ...prev, [userId]: false }));
     }
   };
 
@@ -1315,11 +1308,7 @@ export function App() {
   const renderUserUpdate = (data: any) => {
     const user = data.user || data;
     if (!user) {
-      return (
-        <div className="p-3 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
-          Loading user...
-        </div>
-      );
+      return null;
     }
 
     // Helper function to convert 24-hour time to 12-hour AM/PM format
@@ -1357,11 +1346,7 @@ export function App() {
   const renderCalendarUpdate = (data: any, cumulativeState: AccumulatedState) => {
     const calendar = data.calendar || data;
     if (!calendar || !calendar.events) {
-      return (
-        <div className="p-3 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
-          Loading calendar...
-        </div>
-      );
+      return null;
     }
 
     console.log("renderCalendarUpdate called with cumulative state:", {
@@ -1398,11 +1383,7 @@ export function App() {
     });
     
     if (invitees.length === 0) {
-      return (
-        <div className="p-3 bg-gray-100 rounded-lg text-center text-sm text-gray-600">
-          Loading invitees...
-        </div>
-      );
+      return null;
     }
 
     // Show the full calendar view with invitees when they're loaded
@@ -2216,14 +2197,6 @@ export function App() {
                 return renderTimelineItem(item);
               })}
 
-              {/* Show placeholder when waiting for next state or resuming */}
-              {(waitingForNextState || isResuming) && (
-                <div className="p-4 rounded-lg mb-3">
-                  <div className="animate-pulse">
-                    <div className="h-32 bg-gradient-to-br from-gray-200 via-gray-100 to-gray-300 rounded"></div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
