@@ -164,11 +164,16 @@ interface Resume {
   id: string;
 }
 
+interface LoadingIndicator {
+  type: "loading";
+  message: string;
+}
+
 // Timeline item interface
 interface TimelineItem {
   id: string;
   timestamp: number;
-  type: "ai_message" | "state_update" | "interrupt" | "response" | "subgraph_status";
+  type: "ai_message" | "state_update" | "interrupt" | "response" | "subgraph_status" | "loading";
   content: any;
   stateKey?: StateKey; // For state updates, track the state key
   messageId?: string; // For AI messages, track the message ID to group chunks
@@ -184,6 +189,22 @@ function generateUUID(): string {
     return v.toString(16);
   });
 }
+
+// Helper function to remove the last loading indicator from timeline
+const removeLastLoadingIndicator = (timeline: TimelineItem[]): TimelineItem[] => {
+  // Find the last loading indicator
+  const lastLoadingIndex = timeline.findLastIndex(item => item.type === "loading");
+  if (lastLoadingIndex !== -1) {
+    return timeline.filter((_, index) => index !== lastLoadingIndex);
+  }
+  return timeline;
+};
+
+// Helper function to add timeline item and remove any existing loading indicators
+const addTimelineItem = (timeline: TimelineItem[], newItem: TimelineItem): TimelineItem[] => {
+  const timelineWithoutLoading = removeLastLoadingIndicator(timeline);
+  return [...timelineWithoutLoading, newItem];
+};
 
 // Custom hook for relative time formatting
 const useRelativeTime = (timestamp: string) => {
@@ -297,6 +318,29 @@ const ConversationTooltip = ({
             />
           );
         })}
+      </div>
+    </div>
+  );
+};
+
+// Loading Indicator Component
+const LoadingIndicatorComponent = ({ message }: { message: string }) => {
+  return (
+    <div className="p-3 text-center mb-3">
+      <div className="relative">
+        {/* Animated gradient rectangle */}
+        <div 
+          className="w-full h-16 rounded-lg bg-gradient-to-r from-gray-300 via-gray-200 to-gray-100 animate-pulse"
+          style={{
+            background: 'linear-gradient(90deg, #d1d5db 0%, #e5e7eb 50%, #f3f4f6 100%)',
+            backgroundSize: '200% 100%',
+            animation: 'gradient-shift 2s ease-in-out infinite'
+          }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-gray-600 text-sm font-medium">{message}</span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -495,16 +539,12 @@ export function App() {
 
   // Generate thread_id once at startup
   useEffect(() => {
-    console.log(`Generated thread_id: ${threadId}`);
+    // Thread ID generated
   }, [threadId]);
 
   // Auto-scroll to bottom when timeline updates or subgraph messages change
   useEffect(() => {
     if (timelineContainerRef.current && (timeline.length > 0 || Object.keys(subgraphMessages).length > 0)) {
-      console.log('Auto-scrolling to bottom, timeline length:', timeline.length, 'subgraph messages:', Object.keys(subgraphMessages).length);
-      console.log('Container scrollHeight:', timelineContainerRef.current.scrollHeight);
-      console.log('Container clientHeight:', timelineContainerRef.current.clientHeight);
-      
       // Use setTimeout to ensure DOM has updated
       setTimeout(() => {
         if (timelineContainerRef.current) {
@@ -536,7 +576,6 @@ export function App() {
 
   // Function to handle accepting a rescheduling proposal
   const handleAcceptRescheduling = async (proposal: any, index: number) => {
-    console.log("Accepting rescheduling proposal:", proposal);
     // TODO: Implement API call to accept the proposal
     // For now, just log the action
     alert(`Accepted rescheduling for: ${proposal.original_event?.title}`);
@@ -544,7 +583,6 @@ export function App() {
 
   // Function to handle rejecting a rescheduling proposal
   const handleRejectRescheduling = async (proposal: any, index: number) => {
-    console.log("Rejecting rescheduling proposal:", proposal);
     // TODO: Implement API call to reject the proposal
     // For now, just log the action
     alert(`Rejected rescheduling for: ${proposal.original_event?.title}`);
@@ -589,7 +627,8 @@ export function App() {
           break;
         // Add other state keys as needed
         default:
-          console.log(`Unhandled state key: ${stateKey}`);
+          // Unhandled state key
+          break;
       }
       
       return newState;
@@ -764,7 +803,8 @@ export function App() {
           // This will be handled by the subgraph message tracking
           break;
         default:
-          console.log(`Unhandled response type: ${data.type}`);
+          // Unhandled response type
+          break;
       }
       
       return newState;
@@ -828,15 +868,17 @@ export function App() {
               
               // Add or update AI message in timeline using the id field
               setTimeline((prev) => {
+                // Remove any existing loading indicators before adding new content
+                const timelineWithoutLoading = removeLastLoadingIndicator(prev);
                 const messageId = data.id;
-                const existingIndex = prev.findIndex(
+                const existingIndex = timelineWithoutLoading.findIndex(
                   (item) =>
                     item.type === "ai_message" && item.messageId === messageId
                 );
 
                 if (existingIndex >= 0) {
                   // Update existing AI message by appending content
-                  const updated = [...prev];
+                  const updated = [...timelineWithoutLoading];
                   updated[existingIndex] = {
                     ...updated[existingIndex],
                     content:
@@ -846,31 +888,38 @@ export function App() {
                   return updated;
                 } else {
                   // Create new AI message
-                  return [
-                    ...prev,
-                    {
-                      id: `ai_${messageId}_${Date.now()}`,
-                      timestamp: Date.now(),
-                      type: "ai_message" as const,
-                      content: data.content || "",
-                      messageId: messageId,
-                    },
-                  ];
+                  return addTimelineItem(timelineWithoutLoading, {
+                    id: `ai_${messageId}_${Date.now()}`,
+                    timestamp: Date.now(),
+                    type: "ai_message" as const,
+                    content: data.content || "",
+                    messageId: messageId,
+                  });
                 }
               });
             } else if (data.type === "interrupt") {
               // Handle interrupt
-              console.log("Received interrupt:", data);
               setCurrentInterrupt(data);
               setWaitingForNextState(false);
               
-              // Add interrupt to timeline
+              // Add interrupt to timeline (remove any loading indicators first)
+              setTimeline((prev) => addTimelineItem(prev, {
+                id: `interrupt_${data.id}_${Date.now()}`,
+                timestamp: Date.now(),
+                type: "interrupt" as const,
+                content: data,
+              }));
+            } else if (data.type === "loading") {
+              // Handle loading indicator
+              setWaitingForNextState(false);
+              
+              // Add loading indicator to timeline
               setTimeline((prev) => [
                 ...prev,
                 {
-                  id: `interrupt_${data.id}_${Date.now()}`,
+                  id: `loading_${Date.now()}`,
                   timestamp: Date.now(),
-                  type: "interrupt" as const,
+                  type: "loading" as const,
                   content: data,
                 },
               ]);
@@ -882,20 +931,17 @@ export function App() {
                 // Check if this is a conversation response
                 if (stateKey === '$.invoke_send_rescheduling_proposal_to_invitee') {
                   // This is a conversation response
-                  console.log(`Processing resumed conversation response: ${stateKey}`);
                   processConversationResponse(data[stateKey]);
                   
                   // Don't add to timeline - conversation data is only used for tooltips
                 } else if (stateKey.startsWith('$.invoke_send_rescheduling_proposal_to_invitee:')) {
                   // This is a subgraph message response
-                  console.log(`Processing resumed subgraph message response: ${stateKey}`);
                   processSubgraphMessageResponse(data[stateKey], stateKey);
                   
                   // Don't add to timeline - subgraph messages are displayed separately
                   // The MessageStatusComponent will automatically update when subgraphMessages state changes
                 } else {
                   // This is a regular state update
-                  console.log(`Processing resumed state update: ${stateKey}`);
                   
                   if (!seenStateKeys.has(stateKey)) {
                     setSeenStateKeys(prev => new Set([...prev, stateKey]));
@@ -903,16 +949,13 @@ export function App() {
 
                     // Only add to timeline if there's actual content (not null)
                     if (data[stateKey] !== null) {
-                      setTimeline((prev) => [
-                        ...prev,
-                        {
-                          id: `state_${stateKey}_${Date.now()}`,
-                          timestamp: Date.now(),
-                          type: "state_update" as const,
-                          content: data[stateKey],
-                          stateKey: stateKey,
-                        },
-                      ]);
+                      setTimeline((prev) => addTimelineItem(prev, {
+                        id: `state_${stateKey}_${Date.now()}`,
+                        timestamp: Date.now(),
+                        type: "state_update" as const,
+                        content: data[stateKey],
+                        stateKey: stateKey,
+                      }));
                     }
 
                     // Update accumulated state
@@ -921,18 +964,14 @@ export function App() {
                 }
               } else if (data.type) {
                 // This is a response object
-                console.log(`Processing resumed response: ${data.type}`);
                 
-                setTimeline((prev) => [
-                  ...prev,
-                  {
-                    id: `response_${data.type}_${Date.now()}`,
-                    timestamp: Date.now(),
-                    type: "response" as const,
-                    content: data,
-                    responseType: data.type,
-                  },
-                ]);
+                setTimeline((prev) => addTimelineItem(prev, {
+                  id: `response_${data.type}_${Date.now()}`,
+                  timestamp: Date.now(),
+                  type: "response" as const,
+                  content: data,
+                  responseType: data.type,
+                }));
 
                 // Update accumulated state based on response type
                 updateAccumulatedStateFromResponse(data);
@@ -1035,17 +1074,27 @@ export function App() {
               });
             } else if (data.type === "interrupt") {
               // Handle interrupt
-              console.log("Received interrupt:", data);
               setCurrentInterrupt(data);
               setWaitingForNextState(false);
               
-              // Add interrupt to timeline
+              // Add interrupt to timeline (remove any loading indicators first)
+              setTimeline((prev) => addTimelineItem(prev, {
+                id: `interrupt_${data.id}_${Date.now()}`,
+                timestamp: Date.now(),
+                type: "interrupt" as const,
+                content: data,
+              }));
+            } else if (data.type === "loading") {
+              // Handle loading indicator
+              setWaitingForNextState(false);
+              
+              // Add loading indicator to timeline
               setTimeline((prev) => [
                 ...prev,
                 {
-                  id: `interrupt_${data.id}_${Date.now()}`,
+                  id: `loading_${Date.now()}`,
                   timestamp: Date.now(),
-                  type: "interrupt" as const,
+                  type: "loading" as const,
                   content: data,
                 },
               ]);
@@ -1057,20 +1106,17 @@ export function App() {
                 // Check if this is a conversation response
                 if (stateKey === '$.invoke_send_rescheduling_proposal_to_invitee') {
                   // This is a conversation response
-                  console.log(`Processing conversation response: ${stateKey}`);
                   processConversationResponse(data[stateKey]);
                   
                   // Don't add to timeline - conversation data is only used for tooltips
                 } else if (stateKey.startsWith('$.invoke_send_rescheduling_proposal_to_invitee:')) {
                   // This is a subgraph message response
-                  console.log(`Processing subgraph message response: ${stateKey}`);
                   processSubgraphMessageResponse(data[stateKey], stateKey);
                   
                   // Don't add to timeline - subgraph messages are displayed separately
                   // The MessageStatusComponent will automatically update when subgraphMessages state changes
                 } else {
                   // This is a regular state update
-                  console.log(`Processing state update: ${stateKey}`);
                   
                   if (!seenStateKeys.has(stateKey)) {
                     setSeenStateKeys(prev => new Set([...prev, stateKey]));
@@ -1078,16 +1124,13 @@ export function App() {
 
                     // Only add to timeline if there's actual content (not null)
                     if (data[stateKey] !== null) {
-                      setTimeline((prev) => [
-                        ...prev,
-                        {
-                          id: `state_${stateKey}_${Date.now()}`,
-                          timestamp: Date.now(),
-                          type: "state_update" as const,
-                          content: data[stateKey],
-                          stateKey: stateKey,
-                        },
-                      ]);
+                      setTimeline((prev) => addTimelineItem(prev, {
+                        id: `state_${stateKey}_${Date.now()}`,
+                        timestamp: Date.now(),
+                        type: "state_update" as const,
+                        content: data[stateKey],
+                        stateKey: stateKey,
+                      }));
                     }
 
                     // Update accumulated state
@@ -1096,18 +1139,14 @@ export function App() {
                 }
               } else if (data.type) {
                 // This is a response object
-                console.log(`Processing response: ${data.type}`);
                 
-                setTimeline((prev) => [
-                  ...prev,
-                  {
-                    id: `response_${data.type}_${Date.now()}`,
-                    timestamp: Date.now(),
-                    type: "response" as const,
-                    content: data,
-                    responseType: data.type,
-                  },
-                ]);
+                setTimeline((prev) => addTimelineItem(prev, {
+                  id: `response_${data.type}_${Date.now()}`,
+                  timestamp: Date.now(),
+                  type: "response" as const,
+                  content: data,
+                  responseType: data.type,
+                }));
 
                 // Update accumulated state based on response type
                 updateAccumulatedStateFromResponse(data);
@@ -1204,6 +1243,15 @@ export function App() {
       );
     }
 
+    if (item.type === "loading") {
+      const loadingData = item.content as LoadingIndicator;
+      return (
+        <LoadingIndicatorComponent 
+          key={item.id} 
+          message={loadingData.message} 
+        />
+      );
+    }
 
     return null;
   };
@@ -1217,13 +1265,6 @@ export function App() {
 
     // Build cumulative state up to this timeline item
     const cumulativeState = buildCumulativeState(timelineItem);
-    console.log(`renderStateUpdate for ${stateKey} with cumulative state:`, {
-      hasUser: !!cumulativeState.user,
-      hasCalendar: !!cumulativeState.calendar,
-      hasInvitees: !!cumulativeState.invitees,
-      hasInviteeCalendars: !!cumulativeState.invitee_calendars,
-      hasProposals: !!cumulativeState.pending_rescheduling_proposals
-    });
 
     switch (stateKey) {
       case "$.load_user":
@@ -1250,13 +1291,6 @@ export function App() {
   const renderResponse = (responseType: string, content: any, timelineItem: TimelineItem) => {
     // Build cumulative state up to this timeline item
     const cumulativeState = buildCumulativeState(timelineItem);
-    console.log(`renderResponse for ${responseType} with cumulative state:`, {
-      hasUser: !!cumulativeState.user,
-      hasCalendar: !!cumulativeState.calendar,
-      hasInvitees: !!cumulativeState.invitees,
-      hasInviteeCalendars: !!cumulativeState.invitee_calendars,
-      hasProposals: !!cumulativeState.pending_rescheduling_proposals
-    });
 
     switch (responseType) {
       case "LoadUserResponse":
@@ -1352,14 +1386,6 @@ export function App() {
       return null;
     }
 
-    console.log("renderCalendarUpdate called with cumulative state:", {
-      calendarEvents: calendar?.events?.length || 0,
-      hasUser: !!cumulativeState.user,
-      hasInvitees: !!cumulativeState.invitees,
-      hasInviteeCalendars: !!cumulativeState.invitee_calendars,
-      hasProposals: !!cumulativeState.pending_rescheduling_proposals
-    });
-
     // Use the cumulative state up to this timeline item
     return (
       <CalendarDisplay
@@ -1376,14 +1402,6 @@ export function App() {
   const renderInviteesUpdate = (data: any, cumulativeState: AccumulatedState) => {
     const invitees = data.invitees || [];
     const inviteeCalendars = data.invitee_calendars || {};
-    
-    console.log("renderInviteesUpdate called with cumulative state:", {
-      inviteesCount: invitees.length,
-      inviteeCalendarsCount: Object.keys(inviteeCalendars).length,
-      hasCalendar: !!cumulativeState.calendar,
-      hasUser: !!cumulativeState.user,
-      hasProposals: !!cumulativeState.pending_rescheduling_proposals
-    });
     
     if (invitees.length === 0) {
       return null;
@@ -1429,14 +1447,6 @@ export function App() {
   // Render rescheduling proposals update
   const renderReschedulingProposalsUpdate = (data: any, cumulativeState: AccumulatedState) => {
     const proposals = data.pending_rescheduling_proposals || [];
-    
-    console.log("renderReschedulingProposalsUpdate called with cumulative state:", {
-      proposalsCount: proposals.length,
-      hasCalendar: !!cumulativeState.calendar,
-      hasUser: !!cumulativeState.user,
-      hasInvitees: !!cumulativeState.invitees,
-      hasInviteeCalendars: !!cumulativeState.invitee_calendars
-    });
     
     if (proposals.length === 0) {
       return (
@@ -1540,97 +1550,65 @@ export function App() {
     const currentIndex = timeline.findIndex(item => item.id === timelineItem.id);
     const relevantItems = timeline.slice(0, currentIndex + 1);
     
-    console.log(`buildCumulativeState for timeline item ${timelineItem.id} (${timelineItem.type}):`, {
-      currentIndex,
-      relevantItemsCount: relevantItems.length,
-      relevantItemTypes: relevantItems.map(item => `${item.type}${item.stateKey ? `(${item.stateKey})` : ''}${item.responseType ? `(${item.responseType})` : ''}`)
-    });
-    
     // Process each timeline item to build cumulative state
     for (const item of relevantItems) {
       if (item.type === "state_update" && item.stateKey) {
-        console.log(`Processing state_update: ${item.stateKey}`, {
-          hasContent: !!item.content,
-          contentKeys: item.content ? Object.keys(item.content) : []
-        });
         
         switch (item.stateKey) {
           case "$.load_user":
             if (item.content?.user) {
               state.user = item.content.user;
-              console.log("Added user to cumulative state");
             }
             break;
           case "$.load_calendar":
             if (item.content?.calendar) {
               state.calendar = item.content.calendar;
-              console.log("Added calendar to cumulative state");
             }
             break;
           case "$.load_invitees":
             if (item.content?.invitees) {
               state.invitees = item.content.invitees;
-              console.log("Added invitees to cumulative state");
             }
             if (item.content?.invitee_calendars) {
               state.invitee_calendars = item.content.invitee_calendars;
-              console.log("Added invitee_calendars to cumulative state");
             }
             break;
           case "$.get_rescheduling_proposals":
             if (item.content?.pending_rescheduling_proposals) {
               state.pending_rescheduling_proposals = item.content.pending_rescheduling_proposals;
-              console.log("Added pending_rescheduling_proposals to cumulative state");
             }
             break;
         }
       } else if (item.type === "response") {
-        console.log(`Processing response: ${item.responseType}`, {
-          hasContent: !!item.content,
-          contentKeys: item.content ? Object.keys(item.content) : []
-        });
         
         // Handle response objects that also contain state data
         switch (item.responseType) {
           case "LoadUserResponse":
             if (item.content?.user) {
               state.user = item.content.user;
-              console.log("Added user to cumulative state from response");
             }
             break;
           case "LoadCalendarResponse":
             if (item.content?.calendar) {
               state.calendar = item.content.calendar;
-              console.log("Added calendar to cumulative state from response");
             }
             break;
           case "LoadInviteesResponse":
             if (item.content?.invitees) {
               state.invitees = item.content.invitees;
-              console.log("Added invitees to cumulative state from response");
             }
             if (item.content?.invitee_calendars) {
               state.invitee_calendars = item.content.invitee_calendars;
-              console.log("Added invitee_calendars to cumulative state from response");
             }
             break;
           case "GetReschedulingProposalsResponse":
             if (item.content?.pending_rescheduling_proposals) {
               state.pending_rescheduling_proposals = item.content.pending_rescheduling_proposals;
-              console.log("Added pending_rescheduling_proposals to cumulative state from response");
             }
             break;
         }
       }
     }
-    
-    console.log("Final cumulative state:", {
-      hasUser: !!state.user,
-      hasCalendar: !!state.calendar,
-      hasInvitees: !!state.invitees,
-      hasInviteeCalendars: !!state.invitee_calendars,
-      hasProposals: !!state.pending_rescheduling_proposals
-    });
     
     return state;
   };
@@ -1660,13 +1638,6 @@ export function App() {
 
     // Only capture state if it hasn't been captured yet
     if (!capturedStateRef.current) {
-      console.log("CalendarDisplay capturing state at render time:", {
-        calendarEvents: calendar?.events?.length || 0,
-        inviteesCount: invitees?.length || 0,
-        proposalsCount: pendingReschedulingProposals?.length || 0,
-        calendarId: calendar?.id,
-        currentUserName: currentUser?.given_name
-      });
       
       capturedStateRef.current = {
         calendar,
@@ -1694,12 +1665,6 @@ export function App() {
     inviteeCalendars?: Record<string, Calendar>,
     pendingReschedulingProposals?: any[]
   ) => {
-      console.log("renderTimeBasedCalendar called with:");
-      console.log("- calendar:", calendar);
-      console.log("- currentUser:", currentUser);
-      console.log("- invitees:", invitees);
-      console.log("- inviteeCalendars:", inviteeCalendars);
-      console.log("- pendingReschedulingProposals:", pendingReschedulingProposals);
       
       if (!calendar.events || calendar.events.length === 0) {
         return (
@@ -1709,11 +1674,6 @@ export function App() {
         );
       }
 
-      console.log(
-        "There are ",
-        pendingReschedulingProposals?.length,
-        "pending rescheduling proposals"
-      );
 
       // Get all events from all calendars
       const allEvents = [
@@ -1864,14 +1824,6 @@ export function App() {
                           (newEndMinutes - newStartMinutes)) /
                         60;
 
-                      console.log(
-                        "event",
-                        event.title,
-                        "newStartPosition",
-                        newStartPosition,
-                        "newDuration",
-                        newDuration
-                      );
 
                       return (
                         <div key={event.id} className="relative">
@@ -1956,8 +1908,6 @@ export function App() {
                           </svg>
                         </div>
                       );
-                    } else {
-                      console.log("no pending proposal for event", event.title);
                     }
 
                     // Regular event rendering
@@ -2069,8 +2019,6 @@ export function App() {
   const renderStateContent = (state: any) => {
     // This function is now deprecated in favor of renderStateUpdate and renderResponse
     // But we'll keep it for backward compatibility
-    console.log("renderStateContent called with state type:", state.type);
-    console.log("State data:", state);
     
     // This function is now deprecated - the new stream format uses incremental updates
     // Return a message indicating this is legacy code
