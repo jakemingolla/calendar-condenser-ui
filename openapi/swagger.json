@@ -177,7 +177,8 @@
                         "const": "$.invoke_send_rescheduling_proposal_to_invitee:[uuid].analyze_message"
                       }
                     },
-                    { "$ref": "#/components/schemas/Interrupt" }
+                    { "$ref": "#/components/schemas/Interrupt" },
+                    { "$ref": "#/components/schemas/LoadingIndicator" }
                   ],
                   "title": "Response Stream Api V1 Graphs  Graph Id  Threads  Thread Id  Stream Post"
                 }
@@ -442,6 +443,20 @@
         "type": "object",
         "required": ["invitees", "invitee_calendars"],
         "title": "LoadInviteesResponse"
+      },
+      "LoadingIndicator": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "loading",
+            "title": "Type",
+            "default": "loading"
+          },
+          "message": { "type": "string", "title": "Message" }
+        },
+        "type": "object",
+        "required": ["message"],
+        "title": "LoadingIndicator"
       },
       "OutgoingMessage": {
         "properties": {
