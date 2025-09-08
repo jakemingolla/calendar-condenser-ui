@@ -148,6 +148,20 @@
                     {
                       "type": "object",
                       "additionalProperties": { "type": "null" },
+                      "propertyNames": { "const": "$.update_calendar" }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/LoadCalendarResponse"
+                      },
+                      "propertyNames": {
+                        "const": "$.load_calendar_after_update"
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "additionalProperties": { "type": "null" },
                       "propertyNames": { "const": "$.conclusion" }
                     },
                     {

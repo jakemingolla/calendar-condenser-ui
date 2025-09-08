@@ -1,6 +1,7 @@
 import "./index.css";
 import React, { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import ReactMarkdown from "react-markdown";
+import confetti from "canvas-confetti";
 
 // Type definitions based on the OpenAPI schema
 interface User {
@@ -137,6 +138,7 @@ type StateKey =
   | "$.get_rescheduling_proposals"
   | "$.confirm_rescheduling_proposals"
   | "$.invoke_send_rescheduling_proposal_to_invitee"
+  | "$.load_calendar_after_update"
   | "$.conclusion";
 
 // Accumulated state interface
@@ -344,6 +346,160 @@ const LoadingIndicatorComponent = ({ message }: { message: string }) => {
       </div>
     </div>
   );
+};
+
+// Global confetti trigger tracking
+let confettiTriggered = false;
+
+// Confetti trigger function
+const triggerConfetti = () => {
+  if (confettiTriggered) {
+    console.log('Confetti already triggered, skipping');
+    return;
+  }
+  
+  console.log('Triggering confetti...');
+  confettiTriggered = true;
+  
+  // Add a delay to ensure the calendar is rendered
+  setTimeout(() => {
+    // Get the calendar element to position confetti around it
+    // Look for the most recent calendar element (last one in the DOM)
+    const calendarElements = document.querySelectorAll('[data-calendar-container]');
+    const calendarElement = calendarElements[calendarElements.length - 1];
+    console.log('Calendar elements found:', calendarElements.length);
+    console.log('Using last calendar element:', !!calendarElement);
+    
+    if (calendarElement) {
+      const rect = calendarElement.getBoundingClientRect();
+      console.log('Calendar rect:', rect);
+      
+      // Check if the calendar is visible on screen (more lenient check)
+      const isVisible = rect.bottom > 0 && rect.top < window.innerHeight && 
+                       rect.right > 0 && rect.left < window.innerWidth;
+      
+      console.log('Calendar visibility check:', {
+        top: rect.top,
+        bottom: rect.bottom,
+        left: rect.left,
+        right: rect.right,
+        windowHeight: window.innerHeight,
+        windowWidth: window.innerWidth,
+        isVisible
+      });
+      
+      if (isVisible) {
+        const centerX = (rect.left + rect.right) / 2;
+        const centerY = (rect.top + rect.bottom) / 2;
+        const leftX = rect.left;
+        const rightX = rect.right;
+        
+        // Convert to normalized coordinates (0-1)
+        const centerXNorm = centerX / window.innerWidth;
+        const centerYNorm = centerY / window.innerHeight;
+        const leftXNorm = leftX / window.innerWidth;
+        const rightXNorm = rightX / window.innerWidth;
+        
+        console.log('Confetti positions:', { centerXNorm, centerYNorm, leftXNorm, rightXNorm });
+        
+        // Main burst from the center of the calendar
+        confetti({
+          particleCount: 80,
+          spread: 60,
+          origin: { x: centerXNorm, y: centerYNorm }
+        });
+
+        // Side bursts (left and right)
+        setTimeout(() => {
+          confetti({
+            particleCount: 50,
+            angle: 45,
+            spread: 45,
+            origin: { x: leftXNorm, y: centerYNorm }
+          });
+          confetti({
+            particleCount: 50,
+            angle: 135,
+            spread: 45,
+            origin: { x: rightXNorm, y: centerYNorm }
+          });
+        }, 300);
+      } else {
+        console.log('Calendar is off-screen, looking for visible calendar elements');
+        
+        // Try to find a visible calendar element instead
+        const visibleCalendars = document.querySelectorAll('[data-calendar-container]');
+        let visibleCalendar = null;
+        
+        // Start from the last calendar (most recent) and work backwards
+        for (let i = visibleCalendars.length - 1; i >= 0; i--) {
+          const cal = visibleCalendars[i];
+          const calRect = cal.getBoundingClientRect();
+          const isCalVisible = calRect.bottom > 0 && calRect.top < window.innerHeight && 
+                              calRect.right > 0 && calRect.left < window.innerWidth;
+          if (isCalVisible) {
+            visibleCalendar = cal;
+            console.log('Found visible calendar (index', i, '):', calRect);
+            break;
+          }
+        }
+        
+        if (visibleCalendar) {
+          const rect = visibleCalendar.getBoundingClientRect();
+          const centerX = (rect.left + rect.right) / 2;
+          const centerY = (rect.top + rect.bottom) / 2;
+          const leftX = rect.left;
+          const rightX = rect.right;
+          
+          const centerXNorm = centerX / window.innerWidth;
+          const centerYNorm = centerY / window.innerHeight;
+          const leftXNorm = leftX / window.innerWidth;
+          const rightXNorm = rightX / window.innerWidth;
+          
+          console.log('Using visible calendar for confetti:', { centerXNorm, centerYNorm, leftXNorm, rightXNorm });
+          
+          // Main burst from the center of the calendar
+          confetti({
+            particleCount: 80,
+            spread: 60,
+            origin: { x: centerXNorm, y: centerYNorm }
+          });
+
+          // Side bursts (left and right)
+          console.log('Triggering side bursts');
+          setTimeout(() => {
+            confetti({
+              particleCount: 50,
+              angle: 45,
+              spread: 45,
+              origin: { x: leftXNorm, y: centerYNorm }
+            });
+            confetti({
+              particleCount: 50,
+              angle: 135,
+              spread: 45,
+              origin: { x: rightXNorm, y: centerYNorm }
+            });
+          }, 300);
+        } else {
+          console.log('No visible calendar found, using center positioning');
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 }
+          });
+        }
+      }
+    } else {
+      console.log('Calendar element not found, using fallback');
+      // Fallback to center screen if calendar element not found
+      confetti({
+        particleCount: 100,
+        spread: 70,
+        origin: { y: 0.6 }
+      });
+    }
+  }, 500); // Delay to ensure DOM is updated
 };
 
 // Message Status Component
@@ -602,6 +758,23 @@ export function App() {
         case "$.load_calendar":
           if (data && data.calendar) {
             newState.calendar = data.calendar;
+            // Only set user from calendar if we don't already have user data
+            if (!newState.user && data.calendar.owner) {
+              newState.user = { 
+                id: data.calendar.owner,
+                given_name: "User",
+                timezone: "UTC",
+                avatar_url: "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=",
+                preffered_working_hours: [9, 17]
+              } as User;
+            }
+          }
+          break;
+        case "$.load_calendar_after_update":
+          if (data && data.calendar) {
+            newState.calendar = data.calendar;
+            // Clear pending proposals since events have been updated
+            newState.pending_rescheduling_proposals = [];
             // Only set user from calendar if we don't already have user data
             if (!newState.user && data.calendar.owner) {
               newState.user = { 
@@ -913,16 +1086,13 @@ export function App() {
               // Handle loading indicator
               setWaitingForNextState(false);
               
-              // Add loading indicator to timeline
-              setTimeline((prev) => [
-                ...prev,
-                {
-                  id: `loading_${Date.now()}`,
-                  timestamp: Date.now(),
-                  type: "loading" as const,
-                  content: data,
-                },
-              ]);
+              // Add loading indicator to timeline (this will replace any existing loading indicator)
+              setTimeline((prev) => addTimelineItem(prev, {
+                id: `loading_${Date.now()}`,
+                timestamp: Date.now(),
+                type: "loading" as const,
+                content: data,
+              }));
             } else {
               // Handle state updates and responses
               const stateKey = Object.keys(data).find(key => key.startsWith('$.')) as StateKey;
@@ -1088,16 +1258,13 @@ export function App() {
               // Handle loading indicator
               setWaitingForNextState(false);
               
-              // Add loading indicator to timeline
-              setTimeline((prev) => [
-                ...prev,
-                {
-                  id: `loading_${Date.now()}`,
-                  timestamp: Date.now(),
-                  type: "loading" as const,
-                  content: data,
-                },
-              ]);
+              // Add loading indicator to timeline (this will replace any existing loading indicator)
+              setTimeline((prev) => addTimelineItem(prev, {
+                id: `loading_${Date.now()}`,
+                timestamp: Date.now(),
+                type: "loading" as const,
+                content: data,
+              }));
             } else {
               // Handle state updates and responses
               const stateKey = Object.keys(data).find(key => key.startsWith('$.')) as StateKey;
@@ -1175,7 +1342,9 @@ export function App() {
           key={item.id}
           className="p-3 bg-white rounded-lg text-left mb-3 text-sm"
         >
-          <ReactMarkdown>{processedContent}</ReactMarkdown>
+          <div className="ai-message-content">
+            <ReactMarkdown>{processedContent}</ReactMarkdown>
+          </div>
         </div>
       );
     }
@@ -1270,7 +1439,9 @@ export function App() {
       case "$.load_user":
         return renderUserUpdate(content);
       case "$.load_calendar":
-        return renderCalendarUpdate(content, cumulativeState);
+        return renderCalendarUpdate(content, cumulativeState, stateKey);
+      case "$.load_calendar_after_update":
+        return renderCalendarUpdate(content, cumulativeState, stateKey);
       case "$.load_invitees":
         return renderInviteesUpdate(content, cumulativeState);
       case "$.get_rescheduling_proposals":
@@ -1336,6 +1507,7 @@ export function App() {
       case "$.get_rescheduling_proposals": return "Get Rescheduling Proposals";
       case "$.confirm_rescheduling_proposals": return "Confirm Rescheduling Proposals";
       case "$.invoke_send_rescheduling_proposal_to_invitee": return "Send Rescheduling Proposal";
+      case "$.load_calendar_after_update": return "Load Calendar After Update";
       case "$.conclusion": return "Conclusion";
       default: return stateKey;
     }
@@ -1380,20 +1552,31 @@ export function App() {
   };
 
   // Render calendar update
-  const renderCalendarUpdate = (data: any, cumulativeState: AccumulatedState) => {
+  const renderCalendarUpdate = (data: any, cumulativeState: AccumulatedState, stateKey?: StateKey) => {
     const calendar = data.calendar || data;
     if (!calendar || !calendar.events) {
       return null;
     }
+
+    // For load_calendar_after_update, don't show pending proposals since events have been updated
+    const pendingProposals = stateKey === "$.load_calendar_after_update" 
+      ? [] 
+      : cumulativeState.pending_rescheduling_proposals;
+
+    // For load_calendar_after_update, don't show invitees - only show the main user's calendar
+    const showInvitees = stateKey !== "$.load_calendar_after_update";
+    const invitees = showInvitees ? cumulativeState.invitees : undefined;
+    const inviteeCalendars = showInvitees ? cumulativeState.invitee_calendars : undefined;
 
     // Use the cumulative state up to this timeline item
     return (
       <CalendarDisplay
         calendar={calendar}
         currentUser={cumulativeState.user || {} as User}
-        invitees={cumulativeState.invitees}
-        inviteeCalendars={cumulativeState.invitee_calendars}
-        pendingReschedulingProposals={cumulativeState.pending_rescheduling_proposals}
+        invitees={invitees}
+        inviteeCalendars={inviteeCalendars}
+        pendingReschedulingProposals={pendingProposals}
+        stateKey={stateKey}
       />
     );
   };
@@ -1565,6 +1748,13 @@ export function App() {
               state.calendar = item.content.calendar;
             }
             break;
+          case "$.load_calendar_after_update":
+            if (item.content?.calendar) {
+              state.calendar = item.content.calendar;
+              // Clear pending proposals since events have been updated
+              state.pending_rescheduling_proposals = [];
+            }
+            break;
           case "$.load_invitees":
             if (item.content?.invitees) {
               state.invitees = item.content.invitees;
@@ -1619,13 +1809,15 @@ export function App() {
     currentUser,
     invitees,
     inviteeCalendars,
-    pendingReschedulingProposals
+    pendingReschedulingProposals,
+    stateKey
   }: {
     calendar: any;
     currentUser: User;
     invitees?: User[];
     inviteeCalendars?: Record<string, Calendar>;
     pendingReschedulingProposals?: any[];
+    stateKey?: StateKey;
   }) => {
     // Use useRef to capture state only once, on first render
     const capturedStateRef = useRef<{
@@ -1635,6 +1827,15 @@ export function App() {
       inviteeCalendars?: Record<string, Calendar>;
       pendingReschedulingProposals?: any[];
     } | null>(null);
+
+    // Trigger confetti for load_calendar_after_update
+    useEffect(() => {
+      console.log('CalendarDisplay useEffect triggered with stateKey:', stateKey);
+      if (stateKey === "$.load_calendar_after_update") {
+        console.log('Triggering confetti for load_calendar_after_update');
+        triggerConfetti();
+      }
+    }, [stateKey]);
 
     // Only capture state if it hasn't been captured yet
     if (!capturedStateRef.current) {
@@ -1727,7 +1928,7 @@ export function App() {
       };
 
       return (
-        <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+        <div className="bg-white rounded-lg border shadow-sm overflow-hidden" data-calendar-container>
           {/* Header with user avatars */}
           <div className="bg-gray-50 p-2">
             <div className="flex items-center ml-12">
@@ -1889,9 +2090,9 @@ export function App() {
                             className="absolute z-20"
                             style={{
                               left: "50%",
-                              top: `${(top + height) * 40}px`,
+                              top: `${(top + height / 2) * 40}px`,
                               width: "24px",
-                              height: `${(newStartPosition - (top + height)) * 40}px`,
+                              height: `${Math.abs(newStartPosition - (top + height / 2)) * 40}px`,
                               transform: "translateX(-50%)",
                             }}
                             viewBox="0 0 24 24"
@@ -1899,7 +2100,10 @@ export function App() {
                             xmlns="http://www.w3.org/2000/svg"
                           >
                             <path
-                              d="M12 0 L12 24 M12 24 L8 20 M12 24 L16 20"
+                              d={newStartPosition > (top + height / 2) 
+                                ? "M12 0 L12 24 M12 24 L8 20 M12 24 L16 20"
+                                : "M12 24 L12 0 M12 0 L8 4 M12 0 L16 4"
+                              }
                               stroke="black"
                               strokeWidth="2"
                               strokeLinecap="round"

@@ -49,3 +49,18 @@
     animation: none !important;
   }
 }
+
+/* Enhanced spacing for AI message content */
+.ai-message-content p {
+  margin-bottom: 1.5rem !important;
+  line-height: 1.6;
+}
+
+.ai-message-content p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* Add extra spacing between paragraphs */
+.ai-message-content p + p {
+  margin-top: 1.5rem;
+}
