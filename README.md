@@ -1,4 +1,12 @@
-# bun-react-tailwind-template
+# calendar-condenser-ui
+
+This is the UI for the [calendar-condenser](https://github.com/jakemingolla/calendar-condenser) project to test the UI <> Backend communication layer.
+
+# ⚠️ This repository was 100% vibe coded using [cursor](https://www.cursor.com) ⚠️
+
+The `App.tsx` file is where the sausage is made. There's a ton of random cruft acummulating in there, but it works enough for the demo!
+
+---
 
 To install dependencies:
 
