@@ -140,7 +140,9 @@
                     },
                     {
                       "type": "object",
-                      "additionalProperties": { "type": "null" },
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/InvokeSendReschedulingProposalResponse"
+                      },
                       "propertyNames": {
                         "const": "$.invoke_send_rescheduling_proposal_to_invitee"
                       }
@@ -233,6 +235,40 @@
   },
   "components": {
     "schemas": {
+      "AcceptedRescheduledEvent": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "original_event": {
+            "$ref": "#/components/schemas/CalendarEvent",
+            "description": "The event pending rescheduling."
+          },
+          "new_start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New Start Time",
+            "description": "The new start time for the event."
+          },
+          "new_end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New End Time",
+            "description": "The new end time for the event."
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "A detailed explanation of the rescheduling proposal."
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_event",
+          "new_start_time",
+          "new_end_time",
+          "explanation"
+        ],
+        "title": "AcceptedRescheduledEvent"
+      },
       "AdditionalKwargs": {
         "properties": { "source": { "type": "string", "title": "Source" } },
         "type": "object",
@@ -283,7 +319,7 @@
       "CalendarEvent": {
         "properties": {
           "type": { "type": "string", "title": "Type", "default": "" },
-          "id": { "type": "string", "format": "uuid", "title": "Id" },
+          "id": { "type": "integer", "title": "Id" },
           "title": { "type": "string", "title": "Title" },
           "description": {
             "anyOf": [{ "type": "string" }, { "type": "null" }],
@@ -430,6 +466,31 @@
         "title": "Interrupt",
         "description": "Indicates to the UI the graph is waiting for user input."
       },
+      "InvokeSendReschedulingProposalResponse": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "rejected_rescheduling_proposals": {
+            "items": {
+              "$ref": "#/components/schemas/RejectedRescheduledEvent"
+            },
+            "type": "array",
+            "title": "Rejected Rescheduling Proposals"
+          },
+          "accepted_rescheduling_proposals": {
+            "items": {
+              "$ref": "#/components/schemas/AcceptedRescheduledEvent"
+            },
+            "type": "array",
+            "title": "Accepted Rescheduling Proposals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rejected_rescheduling_proposals",
+          "accepted_rescheduling_proposals"
+        ],
+        "title": "InvokeSendReschedulingProposalResponse"
+      },
       "LoadCalendarResponse": {
         "properties": {
           "type": { "type": "string", "title": "Type", "default": "" },
@@ -541,6 +602,40 @@
         "type": "object",
         "required": ["received_message"],
         "title": "ReceiveMessageResponse"
+      },
+      "RejectedRescheduledEvent": {
+        "properties": {
+          "type": { "type": "string", "title": "Type", "default": "" },
+          "original_event": {
+            "$ref": "#/components/schemas/CalendarEvent",
+            "description": "The event pending rescheduling."
+          },
+          "new_start_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New Start Time",
+            "description": "The new start time for the event."
+          },
+          "new_end_time": {
+            "type": "string",
+            "format": "date-time",
+            "title": "New End Time",
+            "description": "The new end time for the event."
+          },
+          "explanation": {
+            "type": "string",
+            "title": "Explanation",
+            "description": "A detailed explanation of the rescheduling proposal."
+          }
+        },
+        "type": "object",
+        "required": [
+          "original_event",
+          "new_start_time",
+          "new_end_time",
+          "explanation"
+        ],
+        "title": "RejectedRescheduledEvent"
       },
       "ResponseMetadata": {
         "properties": {

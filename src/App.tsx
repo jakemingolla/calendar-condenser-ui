@@ -253,10 +253,13 @@ const MessageComponent = ({
   inviteeUser: User; 
 }) => {
   const relativeTime = useRelativeTime(message.sent_at);
+  
+  // Check if content is very short (like a single emoji or short text)
+  const isShortContent = message.content.length <= 3 || /^[\p{Emoji}\s]+$/u.test(message.content.trim());
 
   return (
     <div className={`flex ${isFromAgent ? 'justify-start' : 'justify-end'}`}>
-      <div className={`flex items-start space-x-2 max-w-[80%] ${isFromAgent ? 'flex-row' : 'flex-row-reverse space-x-reverse'}`}>
+      <div className={`flex items-start space-x-2 ${isShortContent ? 'max-w-fit' : 'max-w-[80%]'} ${isFromAgent ? 'flex-row' : 'flex-row-reverse space-x-reverse'}`}>
         <img
           src={message.from_user.avatar_url}
           alt={`${message.from_user.given_name}'s avatar`}
@@ -265,11 +268,15 @@ const MessageComponent = ({
             e.currentTarget.src = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjQiIGhlaWdodD0iNjQiIHZpZXdCb3g9IjAgMCA2NCA2NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iNjQiIGN5PSI2NCIgcj0iNjQiIGZpbGw9IiNEM0Q3RDAiLz4KPHBhdGggZD0iTTY0IDY0QzY3LjMxMzcgNjQgNzAgNjEuMzEzNyA3MCA1OEM3MCA1NC42ODYzIDY3LjMxMzcgNTIgNjQgNTJDNjAuNjg2MyA1MiA1OCA1NC42ODYzIDU4IDU4QzU4IDYxLjMxMzcgNjAuNjg2MyA2NCA2NCA2NFoiIGZpbGw9IiM5Q0EzQUYiLz4KPHBhdGggZD0iTTY0IDY2QzU2LjI2ODcgNjYgNTAgNzIuMjY4NyA1MCA4MEg3OEM3OCA3Mi4yNjg3IDcxLjczMTMgNjYgNjQgNjZaIiBmaWxsPSIjOUNBM0FGIi8+Cjwvc3ZnPgo=";
           }}
         />
-        <div className={`flex-1 min-w-0 ${isFromAgent ? 'text-left' : 'text-right'}`}>
+        <div className={`${isShortContent ? 'flex-shrink-0' : 'flex-1 min-w-0'} ${isFromAgent ? 'text-left' : 'text-right'}`}>
           <div className={`text-xs text-gray-500 mb-1 ${isFromAgent ? 'text-left' : 'text-right'}`}>
             {message.from_user.given_name} • {relativeTime}
           </div>
-          <div className={`text-sm text-gray-900 break-words p-2 rounded-lg ${
+          <div className={`text-sm text-gray-900 break-words rounded-lg ${
+            isShortContent 
+              ? 'px-3 py-2 inline-block' // Smaller padding for short content
+              : 'p-2' // Normal padding for longer content
+          } ${
             isFromAgent 
               ? 'bg-blue-100 text-blue-900' 
               : 'bg-gray-100 text-gray-900'
@@ -810,10 +817,9 @@ export function App() {
 
   // Helper function to process conversation responses
   const processConversationResponse = (data: InvokeSendReschedulingProposalResponse) => {
-    setConversations(prev => ({
-      ...prev,
-      ...data.conversations_by_invitee
-    }));
+    // The conversation data is actually processed in processSubgraphMessageResponse
+    // This function is kept for compatibility but doesn't need to do anything
+    // since conversations are built from individual message responses
   };
 
   // Helper function to process subgraph message responses
@@ -855,11 +861,31 @@ export function App() {
         case 'send_message':
           if (data.sent_message) {
             updated[uuid].sent = data.sent_message;
+            // Add to conversations - key by invitee's ID (to_user)
+            setConversations(prev => {
+              const conversationKey = data.sent_message.to_user.id;
+              const newConversations = { ...prev };
+              if (!newConversations[conversationKey]) {
+                newConversations[conversationKey] = [];
+              }
+              newConversations[conversationKey].push(data.sent_message);
+              return newConversations;
+            });
           }
           break;
         case 'receive_message':
           if (data.received_message) {
             updated[uuid].received = data.received_message;
+            // Add to conversations - key by invitee's ID (from_user in receive_message)
+            setConversations(prev => {
+              const conversationKey = data.received_message.from_user.id;
+              const newConversations = { ...prev };
+              if (!newConversations[conversationKey]) {
+                newConversations[conversationKey] = [];
+              }
+              newConversations[conversationKey].push(data.received_message);
+              return newConversations;
+            });
           }
           break;
         case 'analyze_message':
